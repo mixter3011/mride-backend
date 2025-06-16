@@ -28,43 +28,33 @@ func main() {
 	jwtSvc := services.NewJWTSvc(cfg.JWTSecret)
 	authSvc := services.NewAuthSvc(database.DB, jwtSvc)
 	otpSvc := services.NewOTPSvc(database.DB, cfg.TwilioSID, cfg.TwilioToken, cfg.TwilioPhone)
+	rideSvc := services.NewRideSvc(database.DB)
 
 	authHandler := handlers.NewAuthHandler(authSvc)
 	otpHandler := handlers.NewOTPHandler(otpSvc, authSvc)
+	rideHandler := handlers.NewRideHandler(rideSvc)
 
 	r := gin.Default()
 
-	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	r.POST("/auth/signup", authHandler.SignUp)
+	r.POST("/auth/signin", authHandler.SignIn)
 
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
-	})
-
-	api := r.Group("/api")
+	protected := r.Group("/", middleware.AuthMiddleware(jwtSvc))
 	{
-		api.POST("/signup", authHandler.SignUp)
-		api.POST("/login", authHandler.SignIn)
-	}
+		protected.GET("/auth/profile", authHandler.GetProfile)
+		protected.POST("/auth/send-otp", otpHandler.SendOTP)
+		protected.POST("/auth/verify-otp", otpHandler.VerifyOTP)
 
-	protected := api.Group("/")
-	protected.Use(middleware.AuthMiddleware(jwtSvc))
-	{
-		protected.GET("/profile", authHandler.GetProfile)
-		protected.POST("/send-otp", otpHandler.SendOTP)
-		protected.POST("/verify-otp", otpHandler.VerifyOTP)
+		protected.POST("/ride/create", rideHandler.CreateRide)
+		protected.GET("/rides/my", rideHandler.GetMyRides)
+		protected.POST("/ride/:id/join", rideHandler.JoinRide)
+		protected.GET("/rides/search", rideHandler.SearchRides)
+		protected.GET("/rides/nearby", rideHandler.GetNearbyRides)
+		protected.GET("/rides/all", rideHandler.GetAllRides)
 	}
-
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
-	})
 
 	log.Printf("Server starting on port %s", cfg.Port)
-	log.Fatal(r.Run(":" + cfg.Port))
+	if err := r.Run(":" + cfg.Port); err != nil {
+		log.Fatal("Failed to start server:", err)
+	}
 }
