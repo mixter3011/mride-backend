@@ -28,11 +28,21 @@ func main() {
 	jwtSvc := services.NewJWTSvc(cfg.JWTSecret)
 	authSvc := services.NewAuthSvc(database.DB, jwtSvc)
 	otpSvc := services.NewOTPSvc(database.DB, cfg.TwilioSID, cfg.TwilioToken, cfg.TwilioPhone)
-	rideSvc := services.NewRideSvc(database.DB)
+
+	fcmSvc, err := services.NewFCMSvc(database.DB, cfg.FirebaseCredentials)
+	if err != nil {
+		log.Printf("Failed to initialize FCM service: %v", err)
+		fcmSvc = nil
+	}
+
+	notificationSvc := services.NewNotificationSvc(database.DB, fcmSvc)
+	rideSvc := services.NewRideSvc(database.DB, notificationSvc)
 
 	authHandler := handlers.NewAuthHandler(authSvc)
 	otpHandler := handlers.NewOTPHandler(otpSvc, authSvc)
 	rideHandler := handlers.NewRideHandler(rideSvc)
+	notificationHandler := handlers.NewNotificationHandler(notificationSvc)
+	fcmHandler := handlers.NewFCMHandler(notificationSvc)
 
 	r := gin.Default()
 
@@ -51,6 +61,14 @@ func main() {
 		protected.GET("/rides/search", rideHandler.SearchRides)
 		protected.GET("/rides/nearby", rideHandler.GetNearbyRides)
 		protected.GET("/rides/all", rideHandler.GetAllRides)
+
+		protected.GET("/notifications", notificationHandler.GetNotifications)
+		protected.PUT("/notifications/:id/read", notificationHandler.MarkAsRead)
+		protected.PUT("/notifications/read-all", notificationHandler.MarkAllAsRead)
+		protected.GET("/notifications/unread-count", notificationHandler.GetUnreadCount)
+
+		protected.POST("/fcm/token", fcmHandler.SaveFCMToken)
+		protected.DELETE("/fcm/token", fcmHandler.RemoveFCMToken)
 	}
 
 	log.Printf("Server starting on port %s", cfg.Port)

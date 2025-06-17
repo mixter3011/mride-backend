@@ -7,6 +7,6 @@ CREATE TABLE IF NOT EXISTS ride_passengers (
     UNIQUE(ride_id, passenger_id)
 );
 
-CREATE INDEX idx_ride_passengers_ride_id ON ride_passengers(ride_id);
-CREATE INDEX idx_ride_passengers_passenger_id ON ride_passengers(passenger_id);
-CREATE INDEX idx_ride_passengers_status ON ride_passengers(status);
+CREATE INDEX IF NOT EXISTS idx_ride_passengers_ride_id ON ride_passengers(ride_id);
+CREATE INDEX IF NOT EXISTS idx_ride_passengers_passenger_id ON ride_passengers(passenger_id);
+CREATE INDEX IF NOT EXISTS idx_ride_passengers_status ON ride_passengers(status);

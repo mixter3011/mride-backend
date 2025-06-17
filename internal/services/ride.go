@@ -13,12 +13,14 @@ import (
 )
 
 type RideSvc struct {
-	db *sql.DB
+	db              *sql.DB
+	notificationSvc *NotificationSvc
 }
 
-func NewRideSvc(db *sql.DB) *RideSvc {
+func NewRideSvc(db *sql.DB, notificationSvc *NotificationSvc) *RideSvc {
 	return &RideSvc{
-		db: db,
+		db:              db,
+		notificationSvc: notificationSvc,
 	}
 }
 
@@ -335,7 +337,22 @@ func (r *RideSvc) JoinRide(userID, rideID int) error {
 		return err
 	}
 
-	return tx.Commit()
+	var passengerName string
+	nameQuery := `SELECT full_name FROM users WHERE id = $1`
+	err = tx.QueryRow(nameQuery, userID).Scan(&passengerName)
+	if err != nil {
+		passengerName = "Unknown User"
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	if r.notificationSvc != nil {
+		r.notificationSvc.CreateRideJoinNotification(ride.UserID, rideID, userID, passengerName)
+	}
+
+	return nil
 }
 
 func (r *RideSvc) GetAllUserRides(userID int) (*models.JoinedRidesResp, error) {

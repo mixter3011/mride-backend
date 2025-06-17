@@ -8,13 +8,14 @@ import (
 )
 
 type Config struct {
-	DBUrl        string
-	JWTSecret    string
-	Port         string
-	TwilioSID    string
-	TwilioToken  string
-	TwilioPhone  string
-	GoogleAPIKey string
+	DBUrl               string
+	JWTSecret           string
+	Port                string
+	TwilioSID           string
+	TwilioToken         string
+	TwilioPhone         string
+	GoogleAPIKey        string
+	FirebaseCredentials string
 }
 
 func Load() *Config {
@@ -23,13 +24,14 @@ func Load() *Config {
 	}
 
 	return &Config{
-		DBUrl:        getEnv("DB_URL", ""),
-		JWTSecret:    getEnv("JWT_SECRET", "default-secret"),
-		Port:         getEnv("PORT", "8080"),
-		TwilioSID:    getEnv("TWILIO_SID", ""),
-		TwilioToken:  getEnv("TWILIO_TOKEN", ""),
-		TwilioPhone:  getEnv("TWILIO_PHONE", ""),
-		GoogleAPIKey: getEnv("GOOGLE_API_KEY", ""),
+		DBUrl:               getEnv("DB_URL", ""),
+		JWTSecret:           getEnv("JWT_SECRET", "default-secret"),
+		Port:                getEnv("PORT", "8080"),
+		TwilioSID:           getEnv("TWILIO_SID", ""),
+		TwilioToken:         getEnv("TWILIO_TOKEN", ""),
+		TwilioPhone:         getEnv("TWILIO_PHONE", ""),
+		GoogleAPIKey:        getEnv("GOOGLE_API_KEY", ""),
+		FirebaseCredentials: getEnv("FIREBASE_CREDENTIALS", ""),
 	}
 }
 

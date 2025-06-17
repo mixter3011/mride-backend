@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS rides (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_rides_user_id ON rides(user_id);
-CREATE INDEX idx_rides_departure_time ON rides(departure_time);
-CREATE INDEX idx_rides_status ON rides(status);
-CREATE INDEX idx_rides_location ON rides(from_latitude, from_longitude, to_latitude, to_longitude);
+CREATE INDEX IF NOT EXISTS idx_rides_user_id ON rides(user_id);
+CREATE INDEX IF NOT EXISTS idx_rides_departure_time ON rides(departure_time);
+CREATE INDEX IF NOT EXISTS idx_rides_status ON rides(status);
+CREATE INDEX IF NOT EXISTS idx_rides_location ON rides(from_latitude, from_longitude, to_latitude, to_longitude);
