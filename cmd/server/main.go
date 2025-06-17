@@ -29,7 +29,7 @@ func main() {
 	authSvc := services.NewAuthSvc(database.DB, jwtSvc)
 	otpSvc := services.NewOTPSvc(database.DB, cfg.TwilioSID, cfg.TwilioToken, cfg.TwilioPhone)
 
-	fcmSvc, err := services.NewFCMSvc(database.DB, cfg.FirebaseCredentials)
+	fcmSvc, err := services.NewFCMSvc(database.DB, cfg.FirebaseCredentials, cfg.FirebaseProjectID)
 	if err != nil {
 		log.Printf("Failed to initialize FCM service: %v", err)
 		fcmSvc = nil

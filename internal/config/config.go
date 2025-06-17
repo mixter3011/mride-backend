@@ -16,6 +16,7 @@ type Config struct {
 	TwilioPhone         string
 	GoogleAPIKey        string
 	FirebaseCredentials string
+	FirebaseProjectID   string
 }
 
 func Load() *Config {
@@ -32,6 +33,7 @@ func Load() *Config {
 		TwilioPhone:         getEnv("TWILIO_PHONE", ""),
 		GoogleAPIKey:        getEnv("GOOGLE_API_KEY", ""),
 		FirebaseCredentials: getEnv("FIREBASE_CREDENTIALS", ""),
+		FirebaseProjectID:   getEnv("FIREBASE_PROJECT_ID", ""),
 	}
 }
 
