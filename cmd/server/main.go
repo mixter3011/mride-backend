@@ -1,7 +1,13 @@
 package main
 
 import (
+	"context"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"mride-backend/internal/config"
 	"mride-backend/internal/db"
@@ -35,7 +41,9 @@ func main() {
 		fcmSvc = nil
 	}
 
-	notificationSvc := services.NewNotificationSvc(database.DB, fcmSvc)
+	webSocketSvc := services.NewWebSocketSvc()
+
+	notificationSvc := services.NewNotificationSvc(database.DB, fcmSvc, webSocketSvc)
 	rideSvc := services.NewRideSvc(database.DB, notificationSvc)
 
 	authHandler := handlers.NewAuthHandler(authSvc)
@@ -43,6 +51,7 @@ func main() {
 	rideHandler := handlers.NewRideHandler(rideSvc)
 	notificationHandler := handlers.NewNotificationHandler(notificationSvc)
 	fcmHandler := handlers.NewFCMHandler(notificationSvc)
+	webSocketHandler := handlers.NewWebSocketHandler(webSocketSvc, jwtSvc)
 
 	r := gin.Default()
 
@@ -69,10 +78,36 @@ func main() {
 
 		protected.POST("/fcm/token", fcmHandler.SaveFCMToken)
 		protected.DELETE("/fcm/token", fcmHandler.RemoveFCMToken)
+
+		protected.GET("/users/online", webSocketHandler.GetOnlineUsers)
 	}
 
-	log.Printf("Server starting on port %s", cfg.Port)
-	if err := r.Run(":" + cfg.Port); err != nil {
-		log.Fatal("Failed to start server:", err)
+	r.GET("/ws", middleware.WebSocketAuthMiddleware(jwtSvc), webSocketHandler.HandleWebSocket)
+
+	srv := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: r,
 	}
+
+	go func() {
+		log.Printf("Server starting on port %s", cfg.Port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal("Failed to start server:", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("Shutting down server...")
+
+	webSocketSvc.Shutdown()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatal("Server forced to shutdown:", err)
+	}
+
+	log.Println("Server exited")
 }

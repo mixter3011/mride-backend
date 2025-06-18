@@ -10,14 +10,16 @@ import (
 )
 
 type NotificationSvc struct {
-	db     *sql.DB
-	fcmSvc *FCMSvc
+	db           *sql.DB
+	fcmSvc       *FCMSvc
+	webSocketSvc *WebSocketSvc
 }
 
-func NewNotificationSvc(db *sql.DB, fcmSvc *FCMSvc) *NotificationSvc {
+func NewNotificationSvc(db *sql.DB, fcmSvc *FCMSvc, webSocketSvc *WebSocketSvc) *NotificationSvc {
 	return &NotificationSvc{
-		db:     db,
-		fcmSvc: fcmSvc,
+		db:           db,
+		fcmSvc:       fcmSvc,
+		webSocketSvc: webSocketSvc,
 	}
 }
 
@@ -45,7 +47,20 @@ func (n *NotificationSvc) CreateRideJoinNotification(driverID, rideID, passenger
 		return err
 	}
 
-	if n.fcmSvc != nil {
+	if n.webSocketSvc != nil && n.webSocketSvc.IsUserOnline(driverID) {
+		wsMessage := WSMessage{
+			Type:    "notification",
+			Title:   title,
+			Message: message,
+			Data:    data,
+		}
+
+		if err := n.webSocketSvc.SendToUser(driverID, wsMessage); err != nil {
+			fmt.Printf("Failed to send WebSocket notification: %v\n", err)
+		} else {
+			fmt.Printf("WebSocket notification sent to user %d\n", driverID)
+		}
+	} else if n.fcmSvc != nil {
 		fcmData := FCMNotificationData{
 			RideID:     strconv.Itoa(rideID),
 			UserID:     strconv.Itoa(passengerID),
