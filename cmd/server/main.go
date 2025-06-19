@@ -67,6 +67,8 @@ func main() {
 		protected.POST("/ride/create", rideHandler.CreateRide)
 		protected.GET("/rides/my", rideHandler.GetMyRides)
 		protected.POST("/ride/:id/join", rideHandler.JoinRide)
+		protected.DELETE("/ride/:id/delete", rideHandler.DeleteRide)
+		protected.DELETE("/ride/:id/leave", rideHandler.LeaveRide)
 		protected.GET("/rides/search", rideHandler.SearchRides)
 		protected.GET("/rides/nearby", rideHandler.GetNearbyRides)
 		protected.GET("/rides/all", rideHandler.GetAllRides)

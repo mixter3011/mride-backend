@@ -79,6 +79,121 @@ func (n *NotificationSvc) CreateRideJoinNotification(driverID, rideID, passenger
 	return nil
 }
 
+func (n *NotificationSvc) CreateRideLeaveNotification(driverID, rideID, passengerID int, passengerName string) error {
+	title := "Passenger Left"
+	message := fmt.Sprintf("%s left your ride", passengerName)
+
+	data := models.NotificationData{
+		RideID:     rideID,
+		UserID:     passengerID,
+		UserName:   passengerName,
+		ActionType: "leave",
+	}
+
+	dataJSON, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	query := `INSERT INTO notifications (user_id, type, title, message, data) 
+			  VALUES ($1, $2, $3, $4, $5)`
+
+	_, err = n.db.Exec(query, driverID, models.NotificationTypeRideLeave, title, message, dataJSON)
+	if err != nil {
+		return err
+	}
+
+	if n.webSocketSvc != nil && n.webSocketSvc.IsUserOnline(driverID) {
+		wsMessage := WSMessage{
+			Type:    "notification",
+			Title:   title,
+			Message: message,
+			Data:    data,
+		}
+
+		if err := n.webSocketSvc.SendToUser(driverID, wsMessage); err != nil {
+			fmt.Printf("Failed to send WebSocket notification: %v\n", err)
+		}
+	} else if n.fcmSvc != nil {
+		fcmData := FCMNotificationData{
+			RideID:     strconv.Itoa(rideID),
+			UserID:     strconv.Itoa(passengerID),
+			UserName:   passengerName,
+			ActionType: "leave",
+			Type:       models.NotificationTypeRideLeave,
+		}
+
+		go func() {
+			if err := n.fcmSvc.SendToUser(driverID, title, message, fcmData); err != nil {
+				fmt.Printf("Failed to send FCM notification: %v\n", err)
+			}
+		}()
+	}
+
+	return nil
+}
+
+func (n *NotificationSvc) CreateRideDeletedNotification(passengerID, rideID, driverID int) error {
+	var driverName string
+	nameQuery := `SELECT full_name FROM users WHERE id = $1`
+	err := n.db.QueryRow(nameQuery, driverID).Scan(&driverName)
+	if err != nil {
+		driverName = "Driver"
+	}
+
+	title := "Ride Cancelled"
+	message := fmt.Sprintf("The ride you joined has been cancelled by %s", driverName)
+
+	data := models.NotificationData{
+		RideID:     rideID,
+		UserID:     driverID,
+		UserName:   driverName,
+		ActionType: "delete",
+	}
+
+	dataJSON, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	query := `INSERT INTO notifications (user_id, type, title, message, data) 
+			  VALUES ($1, $2, $3, $4, $5)`
+
+	_, err = n.db.Exec(query, passengerID, models.NotificationTypeRideDelete, title, message, dataJSON)
+	if err != nil {
+		return err
+	}
+
+	if n.webSocketSvc != nil && n.webSocketSvc.IsUserOnline(passengerID) {
+		wsMessage := WSMessage{
+			Type:    "notification",
+			Title:   title,
+			Message: message,
+			Data:    data,
+		}
+
+		if err := n.webSocketSvc.SendToUser(passengerID, wsMessage); err != nil {
+			fmt.Printf("Failed to send WebSocket notification: %v\n", err)
+		}
+	} else if n.fcmSvc != nil {
+		fcmData := FCMNotificationData{
+			RideID:     strconv.Itoa(rideID),
+			UserID:     strconv.Itoa(driverID),
+			UserName:   driverName,
+			ActionType: "delete",
+			Type:       models.NotificationTypeRideDelete,
+		}
+
+		go func() {
+			if err := n.fcmSvc.SendToUser(passengerID, title, message, fcmData); err != nil {
+				fmt.Printf("Failed to send FCM notification: %v\n", err)
+			}
+		}()
+	}
+
+	return nil
+}
+
 func (n *NotificationSvc) GetUserNotifications(userID int, limit, offset int) (*models.NotificationsResp, error) {
 	if limit <= 0 {
 		limit = 20

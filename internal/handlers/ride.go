@@ -63,6 +63,29 @@ func (h *RideHandler) CreateRide(c *gin.Context) {
 	utils.SuccJSON(c, "Ride created successfully", resp)
 }
 
+func (h *RideHandler) DeleteRide(c *gin.Context) {
+	rideIDStr := c.Param("id")
+	rideID, err := strconv.Atoi(rideIDStr)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, "Invalid ride ID")
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	err = h.rideSvc.DeleteRide(userID.(int), rideID)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.SuccJSON(c, "Ride deleted successfully", nil)
+}
+
 func (h *RideHandler) GetMyRides(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -174,6 +197,29 @@ func (h *RideHandler) JoinRide(c *gin.Context) {
 	}
 
 	utils.SuccJSON(c, "Successfully joined the ride", nil)
+}
+
+func (h *RideHandler) LeaveRide(c *gin.Context) {
+	rideIDStr := c.Param("id")
+	rideID, err := strconv.Atoi(rideIDStr)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, "Invalid ride ID")
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	err = h.rideSvc.LeaveRide(userID.(int), rideID)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.SuccJSON(c, "Successfully left the ride", nil)
 }
 
 func (h *RideHandler) GetAllRides(c *gin.Context) {

@@ -92,6 +92,68 @@ func (r *RideSvc) CreateRide(userID int, req models.CreateRideReq) (*models.Ride
 	}, nil
 }
 
+func (r *RideSvc) DeleteRide(userID, rideID int) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var ride models.Ride
+	rideQuery := `SELECT id, user_id, status FROM rides WHERE id = $1`
+	err = tx.QueryRow(rideQuery, rideID).Scan(&ride.ID, &ride.UserID, &ride.Status)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("ride not found")
+		}
+		return err
+	}
+
+	if ride.UserID != userID {
+		return fmt.Errorf("you can only delete your own rides")
+	}
+
+	var passengerIDs []int
+	passengersQuery := `SELECT passenger_id FROM ride_passengers WHERE ride_id = $1 AND status = 'active'`
+	rows, err := tx.Query(passengersQuery, rideID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var passengerID int
+		if err := rows.Scan(&passengerID); err != nil {
+			return err
+		}
+		passengerIDs = append(passengerIDs, passengerID)
+	}
+
+	deletePassengersQuery := `DELETE FROM ride_passengers WHERE ride_id = $1`
+	_, err = tx.Exec(deletePassengersQuery, rideID)
+	if err != nil {
+		return err
+	}
+
+	deleteRideQuery := `DELETE FROM rides WHERE id = $1`
+	_, err = tx.Exec(deleteRideQuery, rideID)
+	if err != nil {
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	if r.notificationSvc != nil {
+		for _, passengerID := range passengerIDs {
+			r.notificationSvc.CreateRideDeletedNotification(passengerID, rideID, userID)
+		}
+	}
+
+	return nil
+}
+
 func (r *RideSvc) GetRidesByUser(userID int) ([]models.Ride, error) {
 	query := `SELECT id, user_id, car_number, car_model, passenger_count, price, 
 			  from_location, to_location, from_latitude, from_longitude, 
@@ -350,6 +412,61 @@ func (r *RideSvc) JoinRide(userID, rideID int) error {
 
 	if r.notificationSvc != nil {
 		r.notificationSvc.CreateRideJoinNotification(ride.UserID, rideID, userID, passengerName)
+	}
+
+	return nil
+}
+
+func (r *RideSvc) LeaveRide(userID, rideID int) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var ride models.Ride
+	rideQuery := `SELECT id, user_id, status FROM rides WHERE id = $1`
+	err = tx.QueryRow(rideQuery, rideID).Scan(&ride.ID, &ride.UserID, &ride.Status)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("ride not found")
+		}
+		return err
+	}
+
+	if ride.UserID == userID {
+		return fmt.Errorf("you cannot leave your own ride, use delete instead")
+	}
+
+	var passengerID int
+	checkQuery := `SELECT id FROM ride_passengers WHERE ride_id = $1 AND passenger_id = $2 AND status = 'active'`
+	err = tx.QueryRow(checkQuery, rideID, userID).Scan(&passengerID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("you have not joined this ride")
+		}
+		return err
+	}
+
+	deleteQuery := `DELETE FROM ride_passengers WHERE ride_id = $1 AND passenger_id = $2`
+	_, err = tx.Exec(deleteQuery, rideID, userID)
+	if err != nil {
+		return err
+	}
+
+	var userName string
+	nameQuery := `SELECT full_name FROM users WHERE id = $1`
+	err = tx.QueryRow(nameQuery, userID).Scan(&userName)
+	if err != nil {
+		userName = "Unknown User"
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	if r.notificationSvc != nil {
+		r.notificationSvc.CreateRideLeaveNotification(ride.UserID, rideID, userID, userName)
 	}
 
 	return nil
