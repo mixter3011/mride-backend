@@ -46,7 +46,7 @@ func main() {
 	notificationSvc := services.NewNotificationSvc(database.DB, fcmSvc, webSocketSvc)
 	rideSvc := services.NewRideSvc(database.DB, notificationSvc)
 
-	authHandler := handlers.NewAuthHandler(authSvc)
+	authHandler := handlers.NewAuthHandler(authSvc, otpSvc)
 	otpHandler := handlers.NewOTPHandler(otpSvc, authSvc)
 	rideHandler := handlers.NewRideHandler(rideSvc)
 	notificationHandler := handlers.NewNotificationHandler(notificationSvc)
@@ -63,6 +63,12 @@ func main() {
 		protected.GET("/auth/profile", authHandler.GetProfile)
 		protected.POST("/auth/send-otp", otpHandler.SendOTP)
 		protected.POST("/auth/verify-otp", otpHandler.VerifyOTP)
+
+		protected.PUT("/update/profile", authHandler.UpdateProfile)
+		protected.PUT("/update/password", authHandler.UpdatePassword)
+		protected.POST("/update/phone/request-update", authHandler.RequestPhoneUpdate)
+		protected.POST("/update/phone/confirm-update", authHandler.ConfirmPhoneUpdate)
+		protected.PUT("/update/location", authHandler.UpdateLocation)
 
 		protected.POST("/ride/create", rideHandler.CreateRide)
 		protected.GET("/rides/my", rideHandler.GetMyRides)

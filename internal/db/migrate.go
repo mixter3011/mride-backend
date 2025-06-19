@@ -24,6 +24,7 @@ func (db *DB) Migrate() error {
 		"003_create_ride_passengers_table.sql",
 		"004_create_notifications_table.sql",
 		"005_create_fcm_table.sql",
+		"006_add_user_fields.sql",
 	}
 
 	for _, migration := range migrations {
