@@ -235,3 +235,92 @@ func (h *RideHandler) GetAllRides(c *gin.Context) {
 
 	utils.SuccJSON(c, "All rides retrieved successfully", rides)
 }
+
+func (h *RideHandler) StartRide(c *gin.Context) {
+	rideIDStr := c.Param("id")
+	rideID, err := strconv.Atoi(rideIDStr)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, "Invalid ride ID")
+		return
+	}
+
+	var req models.StartRideReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	err = h.rideSvc.StartRide(uint(userID.(int)), uint(rideID), req)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.SuccJSON(c, "Ride started successfully", nil)
+}
+
+func (h *RideHandler) CompleteRide(c *gin.Context) {
+	rideIDStr := c.Param("id")
+	rideID, err := strconv.Atoi(rideIDStr)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, "Invalid ride ID")
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	err = h.rideSvc.CompleteRide(uint(userID.(int)), uint(rideID))
+	if err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.SuccJSON(c, "Ride completed successfully", nil)
+}
+
+func (h *RideHandler) GetRideProgress(c *gin.Context) {
+	rideIDStr := c.Param("id")
+	rideID, err := strconv.Atoi(rideIDStr)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, "Invalid ride ID")
+		return
+	}
+
+	progress, err := h.rideSvc.GetRideProgress(uint(rideID))
+	if err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.SuccJSON(c, "Ride progress retrieved successfully", progress)
+}
+
+func (h *RideHandler) GetActiveRides(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	rides, err := h.rideSvc.GetActiveRidesForUser(uint(userID.(int)))
+	if err != nil {
+		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to fetch active rides")
+		return
+	}
+
+	if rides == nil {
+		rides = []models.RideProgressResp{}
+	}
+
+	utils.SuccJSON(c, "Active rides retrieved successfully", rides)
+}

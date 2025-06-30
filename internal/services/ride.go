@@ -467,3 +467,185 @@ func (r *RideSvc) getCoordinates(address string) (float64, float64, error) {
 
 	return lat, lng, nil
 }
+
+func (r *RideSvc) StartRide(userID, rideID uint, req models.StartRideReq) error {
+	var ride models.Ride
+	if err := r.db.First(&ride, rideID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("ride not found")
+		}
+		return err
+	}
+
+	if ride.UserID != userID {
+		return fmt.Errorf("only the ride creator can start the ride")
+	}
+
+	if ride.Status != "active" {
+		return fmt.Errorf("ride is not in active state")
+	}
+
+	if ride.StartedAt != nil {
+		return fmt.Errorf("ride has already been started")
+	}
+
+	now := time.Now()
+
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&ride).Updates(map[string]interface{}{
+			"status":             "started",
+			"started_at":         &now,
+			"estimated_duration": req.EstimatedDuration,
+		}).Error; err != nil {
+			return err
+		}
+
+		var passengers []models.RidePassenger
+		if err := tx.Where("ride_id = ? AND status = ?", rideID, "active").Find(&passengers).Error; err != nil {
+			return err
+		}
+
+		if r.notificationSvc != nil {
+			for _, passenger := range passengers {
+				r.notificationSvc.CreateRideStartedNotification(passenger.PassengerID, rideID, userID)
+			}
+		}
+
+		return nil
+	})
+}
+
+func (r *RideSvc) CompleteRide(userID, rideID uint) error {
+	var ride models.Ride
+	if err := r.db.First(&ride, rideID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("ride not found")
+		}
+		return err
+	}
+
+	if ride.UserID != userID {
+		return fmt.Errorf("only the ride creator can complete the ride")
+	}
+
+	if ride.Status != "started" {
+		return fmt.Errorf("ride must be started before it can be completed")
+	}
+
+	if ride.CompletedAt != nil {
+		return fmt.Errorf("ride has already been completed")
+	}
+
+	now := time.Now()
+
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&ride).Updates(map[string]interface{}{
+			"status":       "completed",
+			"completed_at": &now,
+		}).Error; err != nil {
+			return err
+		}
+
+		var passengers []models.RidePassenger
+		if err := tx.Where("ride_id = ? AND status = ?", rideID, "active").Find(&passengers).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&models.RidePassenger{}).Where("ride_id = ?", rideID).Update("status", "completed").Error; err != nil {
+			return err
+		}
+
+		if r.notificationSvc != nil {
+			for _, passenger := range passengers {
+				r.notificationSvc.CreateRideCompletedNotification(passenger.PassengerID, rideID, userID)
+			}
+		}
+
+		return nil
+	})
+}
+
+func (r *RideSvc) GetRideProgress(rideID uint) (*models.RideProgressResp, error) {
+	var ride models.Ride
+	if err := r.db.First(&ride, rideID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("ride not found")
+		}
+		return nil, err
+	}
+
+	if ride.Status != "started" {
+		return nil, fmt.Errorf("ride is not currently active")
+	}
+
+	if ride.StartedAt == nil {
+		return nil, fmt.Errorf("ride start time not available")
+	}
+
+	elapsedMinutes := int(time.Since(*ride.StartedAt).Minutes())
+	remainingTime := ride.EstimatedDuration - elapsedMinutes
+	if remainingTime < 0 {
+		remainingTime = 0
+	}
+
+	progressPercent := 0.0
+	if ride.EstimatedDuration > 0 {
+		progressPercent = float64(elapsedMinutes) / float64(ride.EstimatedDuration) * 100
+		if progressPercent > 100 {
+			progressPercent = 100
+		}
+	}
+
+	return &models.RideProgressResp{
+		RideID:            ride.ID,
+		Status:            ride.Status,
+		StartedAt:         ride.StartedAt,
+		EstimatedDuration: ride.EstimatedDuration,
+		RemainingTime:     remainingTime,
+		ProgressPercent:   progressPercent,
+	}, nil
+}
+
+func (r *RideSvc) GetActiveRidesForUser(userID uint) ([]models.RideProgressResp, error) {
+	var rides []models.Ride
+	err := r.db.Joins("JOIN ride_passengers ON rides.id = ride_passengers.ride_id").
+		Where("ride_passengers.passenger_id = ? AND rides.status = ? AND ride_passengers.status = ?",
+			userID, "started", "active").
+		Find(&rides).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	var progressList []models.RideProgressResp
+	for _, ride := range rides {
+		if ride.StartedAt == nil {
+			continue
+		}
+
+		elapsedMinutes := int(time.Since(*ride.StartedAt).Minutes())
+		remainingTime := ride.EstimatedDuration - elapsedMinutes
+		if remainingTime < 0 {
+			remainingTime = 0
+		}
+
+		progressPercent := 0.0
+		if ride.EstimatedDuration > 0 {
+			progressPercent = float64(elapsedMinutes) / float64(ride.EstimatedDuration) * 100
+			if progressPercent > 100 {
+				progressPercent = 100
+			}
+		}
+
+		progressList = append(progressList, models.RideProgressResp{
+			RideID:            ride.ID,
+			Status:            ride.Status,
+			StartedAt:         ride.StartedAt,
+			EstimatedDuration: ride.EstimatedDuration,
+			RemainingTime:     remainingTime,
+			ProgressPercent:   progressPercent,
+		})
+	}
+
+	return progressList, nil
+}

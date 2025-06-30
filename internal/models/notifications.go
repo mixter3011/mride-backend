@@ -30,7 +30,9 @@ type NotificationsResp struct {
 }
 
 const (
-	NotificationTypeRideJoin   = "ride_join"
-	NotificationTypeRideDelete = "ride_delete"
-	NotificationTypeRideLeave  = "ride_leave"
+	NotificationTypeRideJoin      = "ride_join"
+	NotificationTypeRideDelete    = "ride_delete"
+	NotificationTypeRideLeave     = "ride_leave"
+	NotificationTypeRideStarted   = "ride_started"
+	NotificationTypeRideCompleted = "ride_completed"
 )

@@ -79,6 +79,10 @@ func main() {
 		protected.GET("/rides/search", rideHandler.SearchRides)
 		protected.GET("/rides/nearby", rideHandler.GetNearbyRides)
 		protected.GET("/rides/all", rideHandler.GetAllRides)
+		protected.POST("/ride/:id/start", rideHandler.StartRide)
+		protected.POST("/ride/:id/complete", rideHandler.CompleteRide)
+		protected.GET("/ride/:id/progress", rideHandler.GetRideProgress)
+		protected.GET("/rides/active", rideHandler.GetActiveRides)
 
 		protected.GET("/notifications", notificationHandler.GetNotifications)
 		protected.PUT("/notifications/:id/read", notificationHandler.MarkAsRead)
