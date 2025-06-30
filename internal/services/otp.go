@@ -1,7 +1,6 @@
 package services
 
 import (
-	"database/sql"
 	"fmt"
 	"math/rand"
 	"mride-backend/internal/models"
@@ -9,16 +8,18 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type OTPSvc struct {
-	db          *sql.DB
+	db          *gorm.DB
 	twilioSID   string
 	twilioToken string
 	twilioPhone string
 }
 
-func NewOTPSvc(db *sql.DB, sid, token, phone string) *OTPSvc {
+func NewOTPSvc(db *gorm.DB, sid, token, phone string) *OTPSvc {
 	return &OTPSvc{
 		db:          db,
 		twilioSID:   sid,
@@ -32,35 +33,37 @@ func (o *OTPSvc) GenCode() string {
 }
 
 func (o *OTPSvc) SaveOTP(phone, code string) error {
-	query := `INSERT INTO otps (phone, code, expires_at) VALUES ($1, $2, $3)`
-	expiresAt := time.Now().Add(5 * time.Minute)
-	_, err := o.db.Exec(query, phone, code, expiresAt)
-	return err
+	otp := models.OTP{
+		Phone:     phone,
+		Code:      code,
+		ExpiresAt: time.Now().Add(5 * time.Minute),
+		Used:      false,
+	}
+
+	result := o.db.Create(&otp)
+	return result.Error
 }
 
 func (o *OTPSvc) VerifyOTP(phone, code string) error {
 	var otp models.OTP
-	query := `SELECT id, phone, code, expires_at, used FROM otps
-		WHERE phone = $1 AND code = $2 AND used = false
-		ORDER BY created_at DESC LIMIT 1`
 
-	err := o.db.QueryRow(query, phone, code).Scan(
-		&otp.ID, &otp.Phone, &otp.Code, &otp.ExpiresAt, &otp.Used,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
+	result := o.db.Where("phone = ? AND code = ? AND used = ?", phone, code, false).
+		Order("created_at DESC").
+		First(&otp)
+
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
 			return fmt.Errorf("invalid OTP")
 		}
-		return err
+		return result.Error
 	}
 
 	if time.Now().After(otp.ExpiresAt) {
 		return fmt.Errorf("OTP expired")
 	}
 
-	updateQuery := `UPDATE otps SET used = true WHERE id = $1`
-	_, err = o.db.Exec(updateQuery, otp.ID)
-	return err
+	result = o.db.Model(&otp).Update("used", true)
+	return result.Error
 }
 
 func (o *OTPSvc) SendOTP(phone, code string) error {

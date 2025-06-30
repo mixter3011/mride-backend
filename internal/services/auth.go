@@ -1,20 +1,20 @@
 package services
 
 import (
-	"database/sql"
 	"fmt"
-	"strings"
 
 	"mride-backend/internal/models"
 	"mride-backend/internal/utils"
+
+	"gorm.io/gorm"
 )
 
 type AuthSvc struct {
-	db     *sql.DB
+	db     *gorm.DB
 	jwtSvc *JWTSvc
 }
 
-func NewAuthSvc(db *sql.DB, jwtSvc *JWTSvc) *AuthSvc {
+func NewAuthSvc(db *gorm.DB, jwtSvc *JWTSvc) *AuthSvc {
 	return &AuthSvc{
 		db:     db,
 		jwtSvc: jwtSvc,
@@ -26,12 +26,11 @@ func (a *AuthSvc) SignUp(req models.SignUpReq) (*models.AuthResp, error) {
 		return nil, fmt.Errorf("passwords don't match")
 	}
 
-	var exists bool
-	err := a.db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)", req.Email).Scan(&exists)
-	if err != nil {
+	var count int64
+	if err := a.db.Model(&models.User{}).Where("email = ?", req.Email).Count(&count).Error; err != nil {
 		return nil, err
 	}
-	if exists {
+	if count > 0 {
 		return nil, fmt.Errorf("email already registered")
 	}
 
@@ -40,19 +39,17 @@ func (a *AuthSvc) SignUp(req models.SignUpReq) (*models.AuthResp, error) {
 		return nil, err
 	}
 
-	var user models.User
-	query := `INSERT INTO users (full_name, email, password_hash) 
-			 VALUES ($1, $2, $3) 
-			 RETURNING id, full_name, email, phone, phone_verified, created_at, updated_at`
+	user := models.User{
+		FullName:     req.FullName,
+		Email:        req.Email,
+		PasswordHash: pwdHash,
+	}
 
-	err = a.db.QueryRow(query, req.FullName, req.Email, pwdHash).Scan(
-		&user.ID, &user.FullName, &user.Email, &user.Phone, &user.PhoneVerified, &user.CreatedAt, &user.UpdatedAt,
-	)
-	if err != nil {
+	if err := a.db.Create(&user).Error; err != nil {
 		return nil, err
 	}
 
-	token, err := a.jwtSvc.GenToken(user.ID, user.Email)
+	token, err := a.jwtSvc.GenToken(int(user.ID), user.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -65,14 +62,8 @@ func (a *AuthSvc) SignUp(req models.SignUpReq) (*models.AuthResp, error) {
 
 func (a *AuthSvc) SignIn(req models.SignInReq) (*models.AuthResp, error) {
 	var user models.User
-	query := `SELECT id, full_name, email, password_hash, phone, phone_verified, created_at, updated_at 
-			 FROM users WHERE email = $1`
-
-	err := a.db.QueryRow(query, req.Email).Scan(
-		&user.ID, &user.FullName, &user.Email, &user.PasswordHash, &user.Phone, &user.PhoneVerified, &user.CreatedAt, &user.UpdatedAt,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
+	if err := a.db.Where("email = ?", req.Email).First(&user).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("invalid credentials")
 		}
 		return nil, err
@@ -82,7 +73,7 @@ func (a *AuthSvc) SignIn(req models.SignInReq) (*models.AuthResp, error) {
 		return nil, fmt.Errorf("invalid credentials")
 	}
 
-	token, err := a.jwtSvc.GenToken(user.ID, user.Email)
+	token, err := a.jwtSvc.GenToken(int(user.ID), user.Email)
 	if err != nil {
 		return nil, err
 	}
@@ -95,70 +86,47 @@ func (a *AuthSvc) SignIn(req models.SignInReq) (*models.AuthResp, error) {
 
 func (a *AuthSvc) GetUserByID(id int) (*models.User, error) {
 	var user models.User
-	query := `SELECT id, full_name, email, phone, phone_verified, latitude, longitude, created_at, updated_at 
-			 FROM users WHERE id = $1`
-
-	err := a.db.QueryRow(query, id).Scan(
-		&user.ID, &user.FullName, &user.Email, &user.Phone, &user.PhoneVerified,
-		&user.Latitude, &user.Longitude, &user.CreatedAt, &user.UpdatedAt,
-	)
-	if err != nil {
+	if err := a.db.Where("id = ?", id).First(&user).Error; err != nil {
 		return nil, err
 	}
-
 	return &user, nil
 }
 
 func (a *AuthSvc) UpdateProfile(userID int, req models.UpdateProfileReq) error {
 	if req.Email != "" {
-		var exists bool
-		err := a.db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND id != $2)", req.Email, userID).Scan(&exists)
-		if err != nil {
+		var count int64
+		if err := a.db.Model(&models.User{}).Where("email = ? AND id != ?", req.Email, userID).Count(&count).Error; err != nil {
 			return err
 		}
-		if exists {
+		if count > 0 {
 			return fmt.Errorf("email already registered")
 		}
 	}
 
-	setParts := []string{}
-	args := []interface{}{}
-	argIndex := 1
+	updates := make(map[string]interface{})
 
 	if req.FullName != "" {
-		setParts = append(setParts, fmt.Sprintf("full_name = $%d", argIndex))
-		args = append(args, req.FullName)
-		argIndex++
+		updates["full_name"] = req.FullName
 	}
 
 	if req.Email != "" {
-		setParts = append(setParts, fmt.Sprintf("email = $%d", argIndex))
-		args = append(args, req.Email)
-		argIndex++
+		updates["email"] = req.Email
 	}
 
-	if len(setParts) == 0 {
+	if len(updates) == 0 {
 		return fmt.Errorf("no fields to update")
 	}
 
-	setParts = append(setParts, fmt.Sprintf("updated_at = NOW()"))
-	args = append(args, userID)
-
-	query := fmt.Sprintf("UPDATE users SET %s WHERE id = $%d",
-		strings.Join(setParts, ", "), argIndex)
-
-	_, err := a.db.Exec(query, args...)
-	return err
+	return a.db.Model(&models.User{}).Where("id = ?", userID).Updates(updates).Error
 }
 
 func (a *AuthSvc) UpdatePassword(userID int, currentPassword, newPassword string) error {
-	var currentHash string
-	err := a.db.QueryRow("SELECT password_hash FROM users WHERE id = $1", userID).Scan(&currentHash)
-	if err != nil {
+	var user models.User
+	if err := a.db.Where("id = ?", userID).First(&user).Error; err != nil {
 		return err
 	}
 
-	if !utils.CheckPwd(currentPassword, currentHash) {
+	if !utils.CheckPwd(currentPassword, user.PasswordHash) {
 		return fmt.Errorf("current password is incorrect")
 	}
 
@@ -167,57 +135,56 @@ func (a *AuthSvc) UpdatePassword(userID int, currentPassword, newPassword string
 		return err
 	}
 
-	query := `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`
-	_, err = a.db.Exec(query, newHash, userID)
-	return err
+	return a.db.Model(&models.User{}).Where("id = ?", userID).Update("password_hash", newHash).Error
 }
 
 func (a *AuthSvc) PhoneExists(phone string) (bool, error) {
-	var exists bool
-	err := a.db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE phone = $1)", phone).Scan(&exists)
-	return exists, err
+	var count int64
+	if err := a.db.Model(&models.User{}).Where("phone = ?", phone).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func (a *AuthSvc) StorePendingPhoneUpdate(userID int, phone string) error {
-	query := `INSERT INTO pending_phone_updates (user_id, new_phone, created_at) 
-			 VALUES ($1, $2, NOW())
-			 ON CONFLICT (user_id) 
-			 DO UPDATE SET new_phone = $2, created_at = NOW()`
-	_, err := a.db.Exec(query, userID, phone)
-	return err
+	pendingUpdate := models.PendingPhoneUpdate{
+		UserID:   uint(userID),
+		NewPhone: phone,
+	}
+
+	return a.db.Create(&pendingUpdate).Error
 }
 
 func (a *AuthSvc) GetPendingPhoneUpdate(userID int) (string, error) {
-	var phone string
-	query := `SELECT new_phone FROM pending_phone_updates WHERE user_id = $1`
-	err := a.db.QueryRow(query, userID).Scan(&phone)
-	return phone, err
+	var pendingUpdate models.PendingPhoneUpdate
+	if err := a.db.Where("user_id = ?", userID).First(&pendingUpdate).Error; err != nil {
+		return "", err
+	}
+	return pendingUpdate.NewPhone, nil
 }
 
 func (a *AuthSvc) UpdatePhoneVerified(userID int, phone string) error {
-	query := `UPDATE users SET phone = $1, phone_verified = true, updated_at = NOW() WHERE id = $2`
-	_, err := a.db.Exec(query, phone, userID)
-	return err
+	return a.db.Model(&models.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"phone":          phone,
+		"phone_verified": true,
+	}).Error
 }
 
 func (a *AuthSvc) ClearPendingPhoneUpdate(userID int) {
-	a.db.Exec("DELETE FROM pending_phone_updates WHERE user_id = $1", userID)
+	a.db.Where("user_id = ?", userID).Delete(&models.PendingPhoneUpdate{})
 }
 
 func (a *AuthSvc) UpdateLocation(userID int, latitude, longitude float64) error {
-	query := `UPDATE users SET latitude = $1, longitude = $2, updated_at = NOW() WHERE id = $3`
-	_, err := a.db.Exec(query, latitude, longitude, userID)
-	return err
+	return a.db.Model(&models.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"latitude":  latitude,
+		"longitude": longitude,
+	}).Error
 }
 
 func (a *AuthSvc) UpdatePhone(userID int, phone string) error {
-	query := `UPDATE users SET phone = $1 WHERE id = $2`
-	_, err := a.db.Exec(query, phone, userID)
-	return err
+	return a.db.Model(&models.User{}).Where("id = ?", userID).Update("phone", phone).Error
 }
 
 func (a *AuthSvc) VerifyPhone(userID int) error {
-	query := `UPDATE users SET phone_verified = true WHERE id = $1`
-	_, err := a.db.Exec(query, userID)
-	return err
+	return a.db.Model(&models.User{}).Where("id = ?", userID).Update("phone_verified", true).Error
 }

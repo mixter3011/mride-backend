@@ -3,19 +3,21 @@ package services
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type FCMSvc struct {
-	db        *sql.DB
+	db        *gorm.DB
 	projectID string
 	client    *http.Client
 }
@@ -24,6 +26,21 @@ type FCMTokenReq struct {
 	FCMToken string `json:"fcm_token" binding:"required"`
 	DeviceID string `json:"device_id"`
 	Platform string `json:"platform" binding:"required,oneof=android ios web"`
+}
+
+type UserFCMToken struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	UserID    int       `gorm:"not null;index" json:"user_id"`
+	FCMToken  string    `gorm:"not null" json:"fcm_token"`
+	DeviceID  string    `gorm:"not null" json:"device_id"`
+	Platform  string    `gorm:"not null" json:"platform"`
+	IsActive  bool      `gorm:"default:true" json:"is_active"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (UserFCMToken) TableName() string {
+	return "user_fcm_tokens"
 }
 
 type FCMNotificationData struct {
@@ -103,7 +120,7 @@ type FCMResponse struct {
 	} `json:"error,omitempty"`
 }
 
-func NewFCMSvc(db *sql.DB, firebaseCredentialsPath, projectID string) (*FCMSvc, error) {
+func NewFCMSvc(db *gorm.DB, firebaseCredentialsPath, projectID string) (*FCMSvc, error) {
 	if firebaseCredentialsPath == "" || projectID == "" {
 		log.Println("Firebase credentials or project ID not provided, FCM service will be disabled")
 		return &FCMSvc{db: db}, nil
@@ -134,44 +151,41 @@ func NewFCMSvc(db *sql.DB, firebaseCredentialsPath, projectID string) (*FCMSvc, 
 }
 
 func (f *FCMSvc) SaveFCMToken(userID int, req FCMTokenReq) error {
-	query := `
-		INSERT INTO user_fcm_tokens (user_id, fcm_token, device_id, platform, is_active)
-		VALUES ($1, $2, $3, $4, TRUE)
-		ON CONFLICT (user_id, device_id)
-		DO UPDATE SET 
-			fcm_token = EXCLUDED.fcm_token,
-			platform = EXCLUDED.platform,
-			is_active = TRUE,
-			updated_at = NOW()
-	`
+	token := UserFCMToken{
+		UserID:   userID,
+		FCMToken: req.FCMToken,
+		DeviceID: req.DeviceID,
+		Platform: req.Platform,
+		IsActive: true,
+	}
 
-	_, err := f.db.Exec(query, userID, req.FCMToken, req.DeviceID, req.Platform)
-	return err
+	return f.db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "device_id"}},
+		DoUpdates: clause.Assignments(map[string]interface{}{
+			"fcm_token":  req.FCMToken,
+			"platform":   req.Platform,
+			"is_active":  true,
+			"updated_at": time.Now(),
+		}),
+	}).Create(&token).Error
 }
 
 func (f *FCMSvc) GetUserFCMTokens(userID int) ([]string, error) {
-	query := `
-		SELECT fcm_token 
-		FROM user_fcm_tokens 
-		WHERE user_id = $1 AND is_active = TRUE
-	`
+	var tokens []UserFCMToken
+	err := f.db.Where("user_id = ? AND is_active = ?", userID, true).
+		Select("fcm_token").
+		Find(&tokens).Error
 
-	rows, err := f.db.Query(query, userID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var tokens []string
-	for rows.Next() {
-		var token string
-		if err := rows.Scan(&token); err != nil {
-			continue
-		}
-		tokens = append(tokens, token)
+	var tokenStrings []string
+	for _, token := range tokens {
+		tokenStrings = append(tokenStrings, token.FCMToken)
 	}
 
-	return tokens, nil
+	return tokenStrings, nil
 }
 
 func (f *FCMSvc) SendNotification(userIDs []int, title, body string, data FCMNotificationData) error {
@@ -304,15 +318,17 @@ func (f *FCMSvc) handleFailedToken(token string, err error) {
 }
 
 func (f *FCMSvc) removeInvalidToken(token string) {
-	query := `UPDATE user_fcm_tokens SET is_active = FALSE WHERE fcm_token = $1`
-	_, err := f.db.Exec(query, token)
+	err := f.db.Model(&UserFCMToken{}).
+		Where("fcm_token = ?", token).
+		Update("is_active", false).Error
+
 	if err != nil {
 		log.Printf("Error removing invalid FCM token: %v", err)
 	}
 }
 
 func (f *FCMSvc) RemoveUserToken(userID int, deviceID string) error {
-	query := `UPDATE user_fcm_tokens SET is_active = FALSE WHERE user_id = $1 AND device_id = $2`
-	_, err := f.db.Exec(query, userID, deviceID)
-	return err
+	return f.db.Model(&UserFCMToken{}).
+		Where("user_id = ? AND device_id = ?", userID, deviceID).
+		Update("is_active", false).Error
 }

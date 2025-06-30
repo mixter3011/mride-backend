@@ -5,10 +5,12 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"gorm.io/gorm"
 )
 
 type JWTSvc struct {
 	secret []byte
+	db     *gorm.DB
 }
 
 type Claims struct {
@@ -17,9 +19,10 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func NewJWTSvc(secret string) *JWTSvc {
+func NewJWTSvc(secret string, db *gorm.DB) *JWTSvc {
 	return &JWTSvc{
 		secret: []byte(secret),
+		db:     db,
 	}
 }
 

@@ -6,20 +6,20 @@ import (
 )
 
 type Notification struct {
-	ID        int             `json:"id" db:"id"`
-	UserID    int             `json:"user_id" db:"user_id"`
-	Type      string          `json:"type" db:"type"`
-	Title     string          `json:"title" db:"title"`
-	Message   string          `json:"message" db:"message"`
-	Data      json.RawMessage `json:"data" db:"data"`
-	Read      bool            `json:"read" db:"read"`
-	CreatedAt time.Time       `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at" db:"updated_at"`
+	ID        uint            `json:"id" gorm:"primaryKey;autoIncrement"`
+	UserID    uint            `json:"user_id" gorm:"not null;index"`
+	Type      string          `json:"type" gorm:"not null;size:50"`
+	Title     string          `json:"title" gorm:"not null;size:255"`
+	Message   string          `json:"message" gorm:"not null;type:text"`
+	Data      json.RawMessage `json:"data" gorm:"type:jsonb"`
+	Read      bool            `json:"read" gorm:"default:false;index"`
+	CreatedAt time.Time       `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt time.Time       `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
 type NotificationData struct {
-	RideID     int    `json:"ride_id,omitempty"`
-	UserID     int    `json:"user_id,omitempty"`
+	RideID     uint   `json:"ride_id,omitempty"`
+	UserID     uint   `json:"user_id,omitempty"`
 	UserName   string `json:"user_name,omitempty"`
 	ActionType string `json:"action_type,omitempty"`
 }

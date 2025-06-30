@@ -40,6 +40,16 @@ func (h *OTPHandler) SendOTP(c *gin.Context) {
 		return
 	}
 
+	phoneExists, err := h.authSvc.PhoneExists(req.Phone)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+	if phoneExists {
+		utils.ErrJSON(c, http.StatusBadRequest, "Phone number already registered")
+		return
+	}
+
 	if err := h.authSvc.UpdatePhone(userID.(int), req.Phone); err != nil {
 		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to update phone")
 		return

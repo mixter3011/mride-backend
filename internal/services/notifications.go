@@ -1,21 +1,22 @@
 package services
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strconv"
 
 	"mride-backend/internal/models"
+
+	"gorm.io/gorm"
 )
 
 type NotificationSvc struct {
-	db           *sql.DB
+	db           *gorm.DB
 	fcmSvc       *FCMSvc
 	webSocketSvc *WebSocketSvc
 }
 
-func NewNotificationSvc(db *sql.DB, fcmSvc *FCMSvc, webSocketSvc *WebSocketSvc) *NotificationSvc {
+func NewNotificationSvc(db *gorm.DB, fcmSvc *FCMSvc, webSocketSvc *WebSocketSvc) *NotificationSvc {
 	return &NotificationSvc{
 		db:           db,
 		fcmSvc:       fcmSvc,
@@ -23,7 +24,7 @@ func NewNotificationSvc(db *sql.DB, fcmSvc *FCMSvc, webSocketSvc *WebSocketSvc) 
 	}
 }
 
-func (n *NotificationSvc) CreateRideJoinNotification(driverID, rideID, passengerID int, passengerName string) error {
+func (n *NotificationSvc) CreateRideJoinNotification(driverID, rideID, passengerID uint, passengerName string) error {
 	title := "New Passenger Joined"
 	message := fmt.Sprintf("%s joined your ride", passengerName)
 
@@ -39,15 +40,20 @@ func (n *NotificationSvc) CreateRideJoinNotification(driverID, rideID, passenger
 		return err
 	}
 
-	query := `INSERT INTO notifications (user_id, type, title, message, data) 
-			  VALUES ($1, $2, $3, $4, $5)`
+	notification := models.Notification{
+		UserID:  driverID,
+		Type:    models.NotificationTypeRideJoin,
+		Title:   title,
+		Message: message,
+		Data:    dataJSON,
+		Read:    false,
+	}
 
-	_, err = n.db.Exec(query, driverID, models.NotificationTypeRideJoin, title, message, dataJSON)
-	if err != nil {
+	if err := n.db.Create(&notification).Error; err != nil {
 		return err
 	}
 
-	if n.webSocketSvc != nil && n.webSocketSvc.IsUserOnline(driverID) {
+	if n.webSocketSvc != nil && n.webSocketSvc.IsUserOnline(int(driverID)) {
 		wsMessage := WSMessage{
 			Type:    "notification",
 			Title:   title,
@@ -55,22 +61,22 @@ func (n *NotificationSvc) CreateRideJoinNotification(driverID, rideID, passenger
 			Data:    data,
 		}
 
-		if err := n.webSocketSvc.SendToUser(driverID, wsMessage); err != nil {
+		if err := n.webSocketSvc.SendToUser(int(driverID), wsMessage); err != nil {
 			fmt.Printf("Failed to send WebSocket notification: %v\n", err)
 		} else {
 			fmt.Printf("WebSocket notification sent to user %d\n", driverID)
 		}
 	} else if n.fcmSvc != nil {
 		fcmData := FCMNotificationData{
-			RideID:     strconv.Itoa(rideID),
-			UserID:     strconv.Itoa(passengerID),
+			RideID:     strconv.FormatUint(uint64(rideID), 10),
+			UserID:     strconv.FormatUint(uint64(passengerID), 10),
 			UserName:   passengerName,
 			ActionType: "join",
 			Type:       models.NotificationTypeRideJoin,
 		}
 
 		go func() {
-			if err := n.fcmSvc.SendToUser(driverID, title, message, fcmData); err != nil {
+			if err := n.fcmSvc.SendToUser(int(driverID), title, message, fcmData); err != nil {
 				fmt.Printf("Failed to send FCM notification: %v\n", err)
 			}
 		}()
@@ -79,7 +85,7 @@ func (n *NotificationSvc) CreateRideJoinNotification(driverID, rideID, passenger
 	return nil
 }
 
-func (n *NotificationSvc) CreateRideLeaveNotification(driverID, rideID, passengerID int, passengerName string) error {
+func (n *NotificationSvc) CreateRideLeaveNotification(driverID, rideID, passengerID uint, passengerName string) error {
 	title := "Passenger Left"
 	message := fmt.Sprintf("%s left your ride", passengerName)
 
@@ -95,15 +101,20 @@ func (n *NotificationSvc) CreateRideLeaveNotification(driverID, rideID, passenge
 		return err
 	}
 
-	query := `INSERT INTO notifications (user_id, type, title, message, data) 
-			  VALUES ($1, $2, $3, $4, $5)`
+	notification := models.Notification{
+		UserID:  driverID,
+		Type:    models.NotificationTypeRideLeave,
+		Title:   title,
+		Message: message,
+		Data:    dataJSON,
+		Read:    false,
+	}
 
-	_, err = n.db.Exec(query, driverID, models.NotificationTypeRideLeave, title, message, dataJSON)
-	if err != nil {
+	if err := n.db.Create(&notification).Error; err != nil {
 		return err
 	}
 
-	if n.webSocketSvc != nil && n.webSocketSvc.IsUserOnline(driverID) {
+	if n.webSocketSvc != nil && n.webSocketSvc.IsUserOnline(int(driverID)) {
 		wsMessage := WSMessage{
 			Type:    "notification",
 			Title:   title,
@@ -111,20 +122,20 @@ func (n *NotificationSvc) CreateRideLeaveNotification(driverID, rideID, passenge
 			Data:    data,
 		}
 
-		if err := n.webSocketSvc.SendToUser(driverID, wsMessage); err != nil {
+		if err := n.webSocketSvc.SendToUser(int(driverID), wsMessage); err != nil {
 			fmt.Printf("Failed to send WebSocket notification: %v\n", err)
 		}
 	} else if n.fcmSvc != nil {
 		fcmData := FCMNotificationData{
-			RideID:     strconv.Itoa(rideID),
-			UserID:     strconv.Itoa(passengerID),
+			RideID:     strconv.FormatUint(uint64(rideID), 10),
+			UserID:     strconv.FormatUint(uint64(passengerID), 10),
 			UserName:   passengerName,
 			ActionType: "leave",
 			Type:       models.NotificationTypeRideLeave,
 		}
 
 		go func() {
-			if err := n.fcmSvc.SendToUser(driverID, title, message, fcmData); err != nil {
+			if err := n.fcmSvc.SendToUser(int(driverID), title, message, fcmData); err != nil {
 				fmt.Printf("Failed to send FCM notification: %v\n", err)
 			}
 		}()
@@ -133,12 +144,12 @@ func (n *NotificationSvc) CreateRideLeaveNotification(driverID, rideID, passenge
 	return nil
 }
 
-func (n *NotificationSvc) CreateRideDeletedNotification(passengerID, rideID, driverID int) error {
-	var driverName string
-	nameQuery := `SELECT full_name FROM users WHERE id = $1`
-	err := n.db.QueryRow(nameQuery, driverID).Scan(&driverName)
-	if err != nil {
-		driverName = "Driver"
+func (n *NotificationSvc) CreateRideDeletedNotification(passengerID, rideID, driverID uint) error {
+	var user models.User
+	var driverName string = "Driver"
+
+	if err := n.db.Select("full_name").First(&user, driverID).Error; err == nil {
+		driverName = user.FullName
 	}
 
 	title := "Ride Cancelled"
@@ -156,15 +167,20 @@ func (n *NotificationSvc) CreateRideDeletedNotification(passengerID, rideID, dri
 		return err
 	}
 
-	query := `INSERT INTO notifications (user_id, type, title, message, data) 
-			  VALUES ($1, $2, $3, $4, $5)`
+	notification := models.Notification{
+		UserID:  passengerID,
+		Type:    models.NotificationTypeRideDelete,
+		Title:   title,
+		Message: message,
+		Data:    dataJSON,
+		Read:    false,
+	}
 
-	_, err = n.db.Exec(query, passengerID, models.NotificationTypeRideDelete, title, message, dataJSON)
-	if err != nil {
+	if err := n.db.Create(&notification).Error; err != nil {
 		return err
 	}
 
-	if n.webSocketSvc != nil && n.webSocketSvc.IsUserOnline(passengerID) {
+	if n.webSocketSvc != nil && n.webSocketSvc.IsUserOnline(int(passengerID)) {
 		wsMessage := WSMessage{
 			Type:    "notification",
 			Title:   title,
@@ -172,20 +188,20 @@ func (n *NotificationSvc) CreateRideDeletedNotification(passengerID, rideID, dri
 			Data:    data,
 		}
 
-		if err := n.webSocketSvc.SendToUser(passengerID, wsMessage); err != nil {
+		if err := n.webSocketSvc.SendToUser(int(passengerID), wsMessage); err != nil {
 			fmt.Printf("Failed to send WebSocket notification: %v\n", err)
 		}
 	} else if n.fcmSvc != nil {
 		fcmData := FCMNotificationData{
-			RideID:     strconv.Itoa(rideID),
-			UserID:     strconv.Itoa(driverID),
+			RideID:     strconv.FormatUint(uint64(rideID), 10),
+			UserID:     strconv.FormatUint(uint64(driverID), 10),
 			UserName:   driverName,
 			ActionType: "delete",
 			Type:       models.NotificationTypeRideDelete,
 		}
 
 		go func() {
-			if err := n.fcmSvc.SendToUser(passengerID, title, message, fcmData); err != nil {
+			if err := n.fcmSvc.SendToUser(int(passengerID), title, message, fcmData); err != nil {
 				fmt.Printf("Failed to send FCM notification: %v\n", err)
 			}
 		}()
@@ -194,83 +210,63 @@ func (n *NotificationSvc) CreateRideDeletedNotification(passengerID, rideID, dri
 	return nil
 }
 
-func (n *NotificationSvc) GetUserNotifications(userID int, limit, offset int) (*models.NotificationsResp, error) {
+func (n *NotificationSvc) GetUserNotifications(userID uint, limit, offset int) (*models.NotificationsResp, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 
-	query := `SELECT id, user_id, type, title, message, data, read, created_at, updated_at 
-			  FROM notifications 
-			  WHERE user_id = $1 
-			  ORDER BY created_at DESC 
-			  LIMIT $2 OFFSET $3`
-
-	rows, err := n.db.Query(query, userID, limit, offset)
-	if err != nil {
+	var notifications []models.Notification
+	if err := n.db.Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&notifications).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var notifications []models.Notification
-	for rows.Next() {
-		var notification models.Notification
-		err := rows.Scan(
-			&notification.ID, &notification.UserID, &notification.Type,
-			&notification.Title, &notification.Message, &notification.Data,
-			&notification.Read, &notification.CreatedAt, &notification.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		notifications = append(notifications, notification)
-	}
-
-	var unreadCount int
-	countQuery := `SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND read = FALSE`
-	err = n.db.QueryRow(countQuery, userID).Scan(&unreadCount)
-	if err != nil {
+	var unreadCount int64
+	if err := n.db.Model(&models.Notification{}).
+		Where("user_id = ? AND read = ?", userID, false).
+		Count(&unreadCount).Error; err != nil {
 		unreadCount = 0
 	}
 
 	return &models.NotificationsResp{
 		Notifications: notifications,
-		UnreadCount:   unreadCount,
+		UnreadCount:   int(unreadCount),
 	}, nil
 }
 
-func (n *NotificationSvc) MarkAsRead(userID, notificationID int) error {
-	query := `UPDATE notifications SET read = TRUE, updated_at = NOW() 
-			  WHERE id = $1 AND user_id = $2`
-
-	_, err := n.db.Exec(query, notificationID, userID)
-	return err
+func (n *NotificationSvc) MarkAsRead(userID, notificationID uint) error {
+	return n.db.Model(&models.Notification{}).
+		Where("id = ? AND user_id = ?", notificationID, userID).
+		Update("read", true).Error
 }
 
-func (n *NotificationSvc) MarkAllAsRead(userID int) error {
-	query := `UPDATE notifications SET read = TRUE, updated_at = NOW() 
-			  WHERE user_id = $1 AND read = FALSE`
-
-	_, err := n.db.Exec(query, userID)
-	return err
+func (n *NotificationSvc) MarkAllAsRead(userID uint) error {
+	return n.db.Model(&models.Notification{}).
+		Where("user_id = ? AND read = ?", userID, false).
+		Update("read", true).Error
 }
 
-func (n *NotificationSvc) GetUnreadCount(userID int) (int, error) {
-	var count int
-	query := `SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND read = FALSE`
-	err := n.db.QueryRow(query, userID).Scan(&count)
-	return count, err
+func (n *NotificationSvc) GetUnreadCount(userID uint) (int, error) {
+	var count int64
+	err := n.db.Model(&models.Notification{}).
+		Where("user_id = ? AND read = ?", userID, false).
+		Count(&count).Error
+	return int(count), err
 }
 
-func (n *NotificationSvc) SaveFCMToken(userID int, req FCMTokenReq) error {
+func (n *NotificationSvc) SaveFCMToken(userID uint, req FCMTokenReq) error {
 	if n.fcmSvc == nil {
 		return fmt.Errorf("FCM service not available")
 	}
-	return n.fcmSvc.SaveFCMToken(userID, req)
+	return n.fcmSvc.SaveFCMToken(int(userID), req)
 }
 
-func (n *NotificationSvc) RemoveFCMToken(userID int, deviceID string) error {
+func (n *NotificationSvc) RemoveFCMToken(userID uint, deviceID string) error {
 	if n.fcmSvc == nil {
 		return fmt.Errorf("FCM service not available")
 	}
-	return n.fcmSvc.RemoveUserToken(userID, deviceID)
+	return n.fcmSvc.RemoveUserToken(int(userID), deviceID)
 }

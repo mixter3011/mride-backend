@@ -54,7 +54,7 @@ func (h *RideHandler) CreateRide(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.rideSvc.CreateRide(userID.(int), req)
+	resp, err := h.rideSvc.CreateRide(uint(userID.(int)), req)
 	if err != nil {
 		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
 		return
@@ -77,7 +77,7 @@ func (h *RideHandler) DeleteRide(c *gin.Context) {
 		return
 	}
 
-	err = h.rideSvc.DeleteRide(userID.(int), rideID)
+	err = h.rideSvc.DeleteRide(uint(userID.(int)), uint(rideID))
 	if err != nil {
 		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
 		return
@@ -93,7 +93,7 @@ func (h *RideHandler) GetMyRides(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.rideSvc.GetAllUserRides(userID.(int))
+	resp, err := h.rideSvc.GetAllUserRides(uint(userID.(int)))
 	if err != nil {
 		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to fetch user rides")
 		return
@@ -110,7 +110,7 @@ func (h *RideHandler) GetRide(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.rideSvc.GetRideByID(rideID)
+	resp, err := h.rideSvc.GetRideByID(uint(rideID))
 	if err != nil {
 		utils.ErrJSON(c, http.StatusNotFound, "Ride not found")
 		return
@@ -148,9 +148,9 @@ func (h *RideHandler) GetNearbyRides(c *gin.Context) {
 		radius = 10
 	}
 
-	userID := 0
+	userID := uint(0)
 	if userIDVal, exists := c.Get("user_id"); exists {
-		userID = userIDVal.(int)
+		userID = uint(userIDVal.(int))
 	}
 
 	if fromLat < -90 || fromLat > 90 || fromLng < -180 || fromLng > 180 ||
@@ -190,7 +190,7 @@ func (h *RideHandler) JoinRide(c *gin.Context) {
 		return
 	}
 
-	err = h.rideSvc.JoinRide(userID.(int), rideID)
+	err = h.rideSvc.JoinRide(uint(userID.(int)), uint(rideID))
 	if err != nil {
 		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
 		return
@@ -213,7 +213,7 @@ func (h *RideHandler) LeaveRide(c *gin.Context) {
 		return
 	}
 
-	err = h.rideSvc.LeaveRide(userID.(int), rideID)
+	err = h.rideSvc.LeaveRide(uint(userID.(int)), uint(rideID))
 	if err != nil {
 		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
 		return

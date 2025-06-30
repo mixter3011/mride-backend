@@ -32,7 +32,7 @@ func (h *FCMHandler) SaveFCMToken(c *gin.Context) {
 		return
 	}
 
-	err := h.notificationSvc.SaveFCMToken(userID.(int), req)
+	err := h.notificationSvc.SaveFCMToken(uint(userID.(int)), req)
 	if err != nil {
 		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to save FCM token")
 		return
@@ -54,7 +54,7 @@ func (h *FCMHandler) RemoveFCMToken(c *gin.Context) {
 		return
 	}
 
-	err := h.notificationSvc.RemoveFCMToken(userID.(int), deviceID)
+	err := h.notificationSvc.RemoveFCMToken(uint(userID.(int)), deviceID)
 	if err != nil {
 		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to remove FCM token")
 		return

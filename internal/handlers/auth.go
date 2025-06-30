@@ -60,11 +60,6 @@ func (h *AuthHandler) SignIn(c *gin.Context) {
 		return
 	}
 
-	if !utils.ValidPhone(req.Phone) {
-		utils.ErrJSON(c, http.StatusBadRequest, "Invalid phone format")
-		return
-	}
-
 	resp, err := h.authSvc.SignIn(req)
 	if err != nil {
 		utils.ErrJSON(c, http.StatusUnauthorized, err.Error())
@@ -156,7 +151,7 @@ func (h *AuthHandler) RequestPhoneUpdate(c *gin.Context) {
 		return
 	}
 
-	var req models.PhoneUpdateReq
+	var req models.UpdatePhoneReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
 		return
@@ -263,4 +258,57 @@ func (h *AuthHandler) UpdateLocation(c *gin.Context) {
 	}
 
 	utils.SuccJSON(c, "Location updated successfully", nil)
+}
+
+func (h *AuthHandler) UpdatePhone(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	var req models.UpdatePhoneReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if !utils.ValidPhone(req.Phone) {
+		utils.ErrJSON(c, http.StatusBadRequest, "Invalid phone format")
+		return
+	}
+
+	exists, err := h.authSvc.PhoneExists(req.Phone)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusInternalServerError, "Database error")
+		return
+	}
+	if exists {
+		utils.ErrJSON(c, http.StatusBadRequest, "Phone number already registered")
+		return
+	}
+
+	err = h.authSvc.UpdatePhone(userID.(int), req.Phone)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	utils.SuccJSON(c, "Phone updated successfully", nil)
+}
+
+func (h *AuthHandler) VerifyPhone(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	err := h.authSvc.VerifyPhone(userID.(int))
+	if err != nil {
+		utils.ErrJSON(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	utils.SuccJSON(c, "Phone verified successfully", nil)
 }

@@ -1,7 +1,6 @@
 package services
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,21 +9,23 @@ import (
 	"time"
 
 	"mride-backend/internal/models"
+
+	"gorm.io/gorm"
 )
 
 type RideSvc struct {
-	db              *sql.DB
+	db              *gorm.DB
 	notificationSvc *NotificationSvc
 }
 
-func NewRideSvc(db *sql.DB, notificationSvc *NotificationSvc) *RideSvc {
+func NewRideSvc(db *gorm.DB, notificationSvc *NotificationSvc) *RideSvc {
 	return &RideSvc{
 		db:              db,
 		notificationSvc: notificationSvc,
 	}
 }
 
-func (r *RideSvc) CreateRide(userID int, req models.CreateRideReq) (*models.RideResp, error) {
+func (r *RideSvc) CreateRide(userID uint, req models.CreateRideReq) (*models.RideResp, error) {
 	if req.DepartureTime.Before(time.Now()) {
 		return nil, fmt.Errorf("departure time must be in the future")
 	}
@@ -43,45 +44,28 @@ func (r *RideSvc) CreateRide(userID int, req models.CreateRideReq) (*models.Ride
 		return nil, fmt.Errorf("failed to get coordinates for to location: %v", err)
 	}
 
-	tx, err := r.db.Begin()
-	if err != nil {
-		return nil, err
+	ride := models.Ride{
+		UserID:         userID,
+		CarNumber:      req.CarNumber,
+		CarModel:       req.CarModel,
+		PassengerCount: req.PassengerCount,
+		Price:          req.Price,
+		FromLocation:   req.FromLocation,
+		ToLocation:     req.ToLocation,
+		FromLatitude:   fromLat,
+		FromLongitude:  fromLng,
+		ToLatitude:     toLat,
+		ToLongitude:    toLng,
+		DepartureTime:  req.DepartureTime,
+		Status:         "active",
 	}
-	defer tx.Rollback()
 
-	var ride models.Ride
-	query := `INSERT INTO rides (user_id, car_number, car_model, passenger_count, price, 
-			  from_location, to_location, from_latitude, from_longitude, 
-			  to_latitude, to_longitude, departure_time, status) 
-			  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'active') 
-			  RETURNING id, user_id, car_number, car_model, passenger_count, price, 
-			  from_location, to_location, from_latitude, from_longitude, 
-			  to_latitude, to_longitude, departure_time, status, created_at, updated_at`
-
-	err = tx.QueryRow(query, userID, req.CarNumber, req.CarModel, req.PassengerCount,
-		req.Price, req.FromLocation, req.ToLocation, fromLat, fromLng,
-		toLat, toLng, req.DepartureTime).Scan(
-		&ride.ID, &ride.UserID, &ride.CarNumber, &ride.CarModel,
-		&ride.PassengerCount, &ride.Price, &ride.FromLocation, &ride.ToLocation,
-		&ride.FromLatitude, &ride.FromLongitude, &ride.ToLatitude, &ride.ToLongitude,
-		&ride.DepartureTime, &ride.Status, &ride.CreatedAt, &ride.UpdatedAt,
-	)
-	if err != nil {
+	if err := r.db.Create(&ride).Error; err != nil {
 		return nil, err
 	}
 
 	var user models.User
-	userQuery := `SELECT id, full_name, email, phone, phone_verified, created_at, updated_at 
-				  FROM users WHERE id = $1`
-	err = tx.QueryRow(userQuery, userID).Scan(
-		&user.ID, &user.FullName, &user.Email, &user.Phone,
-		&user.PhoneVerified, &user.CreatedAt, &user.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = tx.Commit(); err != nil {
+	if err := r.db.First(&user, userID).Error; err != nil {
 		return nil, err
 	}
 
@@ -92,18 +76,10 @@ func (r *RideSvc) CreateRide(userID int, req models.CreateRideReq) (*models.Ride
 	}, nil
 }
 
-func (r *RideSvc) DeleteRide(userID, rideID int) error {
-	tx, err := r.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
+func (r *RideSvc) DeleteRide(userID, rideID uint) error {
 	var ride models.Ride
-	rideQuery := `SELECT id, user_id, status FROM rides WHERE id = $1`
-	err = tx.QueryRow(rideQuery, rideID).Scan(&ride.ID, &ride.UserID, &ride.Status)
-	if err != nil {
-		if err == sql.ErrNoRows {
+	if err := r.db.First(&ride, rideID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
 			return fmt.Errorf("ride not found")
 		}
 		return err
@@ -113,106 +89,47 @@ func (r *RideSvc) DeleteRide(userID, rideID int) error {
 		return fmt.Errorf("you can only delete your own rides")
 	}
 
-	var passengerIDs []int
-	passengersQuery := `SELECT passenger_id FROM ride_passengers WHERE ride_id = $1 AND status = 'active'`
-	rows, err := tx.Query(passengersQuery, rideID)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
+	var passengers []models.RidePassenger
+	r.db.Where("ride_id = ? AND status = ?", rideID, "active").Find(&passengers)
 
-	for rows.Next() {
-		var passengerID int
-		if err := rows.Scan(&passengerID); err != nil {
+	passengerIDs := make([]uint, len(passengers))
+	for i, p := range passengers {
+		passengerIDs[i] = p.PassengerID
+	}
+
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("ride_id = ?", rideID).Delete(&models.RidePassenger{}).Error; err != nil {
 			return err
 		}
-		passengerIDs = append(passengerIDs, passengerID)
-	}
 
-	deletePassengersQuery := `DELETE FROM ride_passengers WHERE ride_id = $1`
-	_, err = tx.Exec(deletePassengersQuery, rideID)
-	if err != nil {
-		return err
-	}
-
-	deleteRideQuery := `DELETE FROM rides WHERE id = $1`
-	_, err = tx.Exec(deleteRideQuery, rideID)
-	if err != nil {
-		return err
-	}
-
-	if err = tx.Commit(); err != nil {
-		return err
-	}
-
-	if r.notificationSvc != nil {
-		for _, passengerID := range passengerIDs {
-			r.notificationSvc.CreateRideDeletedNotification(passengerID, rideID, userID)
+		if err := tx.Delete(&ride).Error; err != nil {
+			return err
 		}
-	}
 
-	return nil
+		if r.notificationSvc != nil {
+			for _, passengerID := range passengerIDs {
+				r.notificationSvc.CreateRideDeletedNotification(passengerID, rideID, userID)
+			}
+		}
+
+		return nil
+	})
 }
 
-func (r *RideSvc) GetRidesByUser(userID int) ([]models.Ride, error) {
-	query := `SELECT id, user_id, car_number, car_model, passenger_count, price, 
-			  from_location, to_location, from_latitude, from_longitude, 
-			  to_latitude, to_longitude, departure_time, status, created_at, updated_at 
-			  FROM rides WHERE user_id = $1 ORDER BY created_at DESC`
-
-	rows, err := r.db.Query(query, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
+func (r *RideSvc) GetRidesByUser(userID uint) ([]models.Ride, error) {
 	var rides []models.Ride
-	for rows.Next() {
-		var ride models.Ride
-		err := rows.Scan(&ride.ID, &ride.UserID, &ride.CarNumber, &ride.CarModel,
-			&ride.PassengerCount, &ride.Price, &ride.FromLocation, &ride.ToLocation,
-			&ride.FromLatitude, &ride.FromLongitude, &ride.ToLatitude, &ride.ToLongitude,
-			&ride.DepartureTime, &ride.Status, &ride.CreatedAt, &ride.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		rides = append(rides, ride)
-	}
-
-	return rides, nil
+	err := r.db.Where("user_id = ?", userID).Order("created_at DESC").Find(&rides).Error
+	return rides, err
 }
 
-func (r *RideSvc) GetRideByID(rideID int) (*models.RideResp, error) {
+func (r *RideSvc) GetRideByID(rideID uint) (*models.RideResp, error) {
 	var ride models.Ride
-	var user models.User
-
-	query := `SELECT r.id, r.user_id, r.car_number, r.car_model, r.passenger_count, r.price, 
-			  r.from_location, r.to_location, r.from_latitude, r.from_longitude, 
-			  r.to_latitude, r.to_longitude, r.departure_time, r.status, r.created_at, r.updated_at,
-			  u.id, u.full_name, u.email, u.phone, u.phone_verified, u.created_at, u.updated_at
-			  FROM rides r 
-			  JOIN users u ON r.user_id = u.id 
-			  WHERE r.id = $1`
-
-	err := r.db.QueryRow(query, rideID).Scan(
-		&ride.ID, &ride.UserID, &ride.CarNumber, &ride.CarModel,
-		&ride.PassengerCount, &ride.Price, &ride.FromLocation, &ride.ToLocation,
-		&ride.FromLatitude, &ride.FromLongitude, &ride.ToLatitude, &ride.ToLongitude,
-		&ride.DepartureTime, &ride.Status, &ride.CreatedAt, &ride.UpdatedAt,
-		&user.ID, &user.FullName, &user.Email, &user.Phone,
-		&user.PhoneVerified, &user.CreatedAt, &user.UpdatedAt,
-	)
-	if err != nil {
+	if err := r.db.Preload("User").First(&ride, rideID).Error; err != nil {
 		return nil, err
 	}
 
-	var joinedCount int
-	countQuery := `SELECT COUNT(*) FROM ride_passengers WHERE ride_id = $1 AND status = 'active'`
-	err = r.db.QueryRow(countQuery, rideID).Scan(&joinedCount)
-	if err != nil {
-		joinedCount = 0
-	}
+	var joinedCount int64
+	r.db.Model(&models.RidePassenger{}).Where("ride_id = ? AND status = ?", rideID, "active").Count(&joinedCount)
 
 	joinedUsers, err := r.getJoinedUsers(rideID)
 	if err != nil {
@@ -221,147 +138,74 @@ func (r *RideSvc) GetRideByID(rideID int) (*models.RideResp, error) {
 
 	return &models.RideResp{
 		Ride:           ride,
-		User:           user,
+		User:           ride.User,
 		JoinedUsers:    joinedUsers,
-		AvailableSeats: ride.PassengerCount - joinedCount,
+		AvailableSeats: ride.PassengerCount - int(joinedCount),
 	}, nil
 }
 
 func (r *RideSvc) SearchRides(from, to string) ([]models.RideResp, error) {
-	query := `SELECT r.id, r.user_id, r.car_number, r.car_model, r.passenger_count, r.price, 
-              r.from_location, r.to_location, r.from_latitude, r.from_longitude, 
-              r.to_latitude, r.to_longitude, r.departure_time, r.status, r.created_at, r.updated_at,
-              u.id, u.full_name, u.email, u.phone, u.phone_verified, u.created_at, u.updated_at
-              FROM rides r 
-              JOIN users u ON r.user_id = u.id 
-              WHERE r.status = 'active' 
-              AND r.departure_time > NOW()
-              AND r.from_location ILIKE $1
-              AND r.to_location ILIKE $2`
+	var rides []models.Ride
+	err := r.db.Preload("User").
+		Where("status = ? AND departure_time > ? AND from_location ILIKE ? AND to_location ILIKE ?",
+			"active", time.Now(), "%"+from+"%", "%"+to+"%").
+		Find(&rides).Error
 
-	rows, err := r.db.Query(query, "%"+from+"%", "%"+to+"%")
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	rides := []models.RideResp{}
-	for rows.Next() {
-		var ride models.Ride
-		var user models.User
+	var rideResponses []models.RideResp
+	for _, ride := range rides {
+		var joinedCount int64
+		r.db.Model(&models.RidePassenger{}).Where("ride_id = ? AND status = ?", ride.ID, "active").Count(&joinedCount)
 
-		err := rows.Scan(&ride.ID, &ride.UserID, &ride.CarNumber, &ride.CarModel,
-			&ride.PassengerCount, &ride.Price, &ride.FromLocation, &ride.ToLocation,
-			&ride.FromLatitude, &ride.FromLongitude, &ride.ToLatitude, &ride.ToLongitude,
-			&ride.DepartureTime, &ride.Status, &ride.CreatedAt, &ride.UpdatedAt,
-			&user.ID, &user.FullName, &user.Email, &user.Phone,
-			&user.PhoneVerified, &user.CreatedAt, &user.UpdatedAt)
-		if err != nil {
-			return nil, err
-		}
-
-		var joinedCount int
-		countQuery := `SELECT COUNT(*) FROM ride_passengers WHERE ride_id = $1 AND status = 'active'`
-		err = r.db.QueryRow(countQuery, ride.ID).Scan(&joinedCount)
-		if err != nil {
-			joinedCount = 0
-		}
-
-		rides = append(rides, models.RideResp{
+		rideResponses = append(rideResponses, models.RideResp{
 			Ride:           ride,
-			User:           user,
-			AvailableSeats: ride.PassengerCount - joinedCount,
+			User:           ride.User,
+			AvailableSeats: ride.PassengerCount - int(joinedCount),
 		})
 	}
-	return rides, nil
+
+	return rideResponses, nil
 }
 
-func (r *RideSvc) GetNearbyRides(userID int, req models.NearbyRidesReq) ([]models.RideResp, error) {
+func (r *RideSvc) GetNearbyRides(userID uint, req models.NearbyRidesReq) ([]models.RideResp, error) {
 	if req.RadiusKM <= 0 {
 		req.RadiusKM = 10
 	}
 
-	query := `
-	SELECT 
-		r.id, r.user_id, r.car_number, r.car_model, r.passenger_count, r.price, 
-		r.from_location, r.to_location, r.from_latitude, r.from_longitude, 
-		r.to_latitude, r.to_longitude, r.departure_time, r.status, r.created_at, r.updated_at,
-		u.id, u.full_name, u.email, u.phone, u.phone_verified, u.created_at, u.updated_at,
-		COALESCE((SELECT COUNT(*) FROM ride_passengers WHERE ride_id = r.id AND status = 'active'), 0) as joined_count,
-		6371 * acos(
-			GREATEST(-1, LEAST(1,
-				cos(radians($1)) * 
-				cos(radians(r.from_latitude)) * 
-				cos(radians(r.from_longitude) - radians($2)) + 
-				sin(radians($1)) * 
-				sin(radians(r.from_latitude))
-			))
-		) as from_distance,
-		6371 * acos(
-			GREATEST(-1, LEAST(1,
-				cos(radians($3)) * 
-				cos(radians(r.to_latitude)) * 
-				cos(radians(r.to_longitude) - radians($4)) + 
-				sin(radians($3)) * 
-				sin(radians(r.to_latitude))
-			))
-		) as to_distance
-	FROM rides r 
-	JOIN users u ON r.user_id = u.id 
-	ORDER BY r.created_at DESC`
-
-	rows, err := r.db.Query(query, req.FromLatitude, req.FromLongitude,
-		req.ToLatitude, req.ToLongitude)
+	var rides []models.Ride
+	err := r.db.Preload("User").Order("created_at DESC").Find(&rides).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	rides := []models.RideResp{}
-	for rows.Next() {
-		var ride models.Ride
-		var user models.User
-		var joinedCount int
-		var fromDistance, toDistance float64
+	var rideResponses []models.RideResp
+	for _, ride := range rides {
+		var joinedCount int64
+		r.db.Model(&models.RidePassenger{}).Where("ride_id = ? AND status = ?", ride.ID, "active").Count(&joinedCount)
 
-		err := rows.Scan(
-			&ride.ID, &ride.UserID, &ride.CarNumber, &ride.CarModel,
-			&ride.PassengerCount, &ride.Price, &ride.FromLocation, &ride.ToLocation,
-			&ride.FromLatitude, &ride.FromLongitude, &ride.ToLatitude, &ride.ToLongitude,
-			&ride.DepartureTime, &ride.Status, &ride.CreatedAt, &ride.UpdatedAt,
-			&user.ID, &user.FullName, &user.Email, &user.Phone,
-			&user.PhoneVerified, &user.CreatedAt, &user.UpdatedAt,
-			&joinedCount, &fromDistance, &toDistance,
-		)
-		if err != nil {
-			return nil, err
-		}
+		fromDistance := r.calculateDistance(req.FromLatitude, req.FromLongitude, ride.FromLatitude, ride.FromLongitude)
+		toDistance := r.calculateDistance(req.ToLatitude, req.ToLongitude, ride.ToLatitude, ride.ToLongitude)
 
 		fmt.Printf("Ride ID: %d, From Distance: %.2f km, To Distance: %.2f km, Status: %s, Departure: %v\n",
 			ride.ID, fromDistance, toDistance, ride.Status, ride.DepartureTime)
 
-		rides = append(rides, models.RideResp{
+		rideResponses = append(rideResponses, models.RideResp{
 			Ride:           ride,
-			User:           user,
-			AvailableSeats: ride.PassengerCount - joinedCount,
+			User:           ride.User,
+			AvailableSeats: ride.PassengerCount - int(joinedCount),
 		})
 	}
 
-	return rides, nil
+	return rideResponses, nil
 }
 
-func (r *RideSvc) JoinRide(userID, rideID int) error {
-	tx, err := r.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
+func (r *RideSvc) JoinRide(userID, rideID uint) error {
 	var ride models.Ride
-	rideQuery := `SELECT id, user_id, passenger_count, status FROM rides WHERE id = $1`
-	err = tx.QueryRow(rideQuery, rideID).Scan(&ride.ID, &ride.UserID, &ride.PassengerCount, &ride.Status)
-	if err != nil {
-		if err == sql.ErrNoRows {
+	if err := r.db.First(&ride, rideID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
 			return fmt.Errorf("ride not found")
 		}
 		return err
@@ -375,60 +219,47 @@ func (r *RideSvc) JoinRide(userID, rideID int) error {
 		return fmt.Errorf("ride is not active")
 	}
 
-	var existingID int
-	checkQuery := `SELECT id FROM ride_passengers WHERE ride_id = $1 AND passenger_id = $2 AND status = 'active'`
-	err = tx.QueryRow(checkQuery, rideID, userID).Scan(&existingID)
-	if err == nil {
+	var existing models.RidePassenger
+	if err := r.db.Where("ride_id = ? AND passenger_id = ? AND status = ?", rideID, userID, "active").First(&existing).Error; err == nil {
 		return fmt.Errorf("you have already joined this ride")
 	}
 
-	var joinedCount int
-	countQuery := `SELECT COUNT(*) FROM ride_passengers WHERE ride_id = $1 AND status = 'active'`
-	err = tx.QueryRow(countQuery, rideID).Scan(&joinedCount)
-	if err != nil {
-		return err
-	}
+	var joinedCount int64
+	r.db.Model(&models.RidePassenger{}).Where("ride_id = ? AND status = ?", rideID, "active").Count(&joinedCount)
 
-	if joinedCount >= ride.PassengerCount {
+	if int(joinedCount) >= ride.PassengerCount {
 		return fmt.Errorf("no available seats")
 	}
 
-	insertQuery := `INSERT INTO ride_passengers (ride_id, passenger_id, status) VALUES ($1, $2, 'active')`
-	_, err = tx.Exec(insertQuery, rideID, userID)
-	if err != nil {
-		return err
+	passenger := models.RidePassenger{
+		RideID:      rideID,
+		PassengerID: userID,
+		Status:      "active",
 	}
 
-	var passengerName string
-	nameQuery := `SELECT full_name FROM users WHERE id = $1`
-	err = tx.QueryRow(nameQuery, userID).Scan(&passengerName)
-	if err != nil {
-		passengerName = "Unknown User"
-	}
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&passenger).Error; err != nil {
+			return err
+		}
 
-	if err = tx.Commit(); err != nil {
-		return err
-	}
+		var user models.User
+		passengerName := "Unknown User"
+		if err := tx.First(&user, userID).Error; err == nil {
+			passengerName = user.FullName
+		}
 
-	if r.notificationSvc != nil {
-		r.notificationSvc.CreateRideJoinNotification(ride.UserID, rideID, userID, passengerName)
-	}
+		if r.notificationSvc != nil {
+			r.notificationSvc.CreateRideJoinNotification(ride.UserID, rideID, userID, passengerName)
+		}
 
-	return nil
+		return nil
+	})
 }
 
-func (r *RideSvc) LeaveRide(userID, rideID int) error {
-	tx, err := r.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
+func (r *RideSvc) LeaveRide(userID, rideID uint) error {
 	var ride models.Ride
-	rideQuery := `SELECT id, user_id, status FROM rides WHERE id = $1`
-	err = tx.QueryRow(rideQuery, rideID).Scan(&ride.ID, &ride.UserID, &ride.Status)
-	if err != nil {
-		if err == sql.ErrNoRows {
+	if err := r.db.First(&ride, rideID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
 			return fmt.Errorf("ride not found")
 		}
 		return err
@@ -438,41 +269,34 @@ func (r *RideSvc) LeaveRide(userID, rideID int) error {
 		return fmt.Errorf("you cannot leave your own ride, use delete instead")
 	}
 
-	var passengerID int
-	checkQuery := `SELECT id FROM ride_passengers WHERE ride_id = $1 AND passenger_id = $2 AND status = 'active'`
-	err = tx.QueryRow(checkQuery, rideID, userID).Scan(&passengerID)
-	if err != nil {
-		if err == sql.ErrNoRows {
+	var passenger models.RidePassenger
+	if err := r.db.Where("ride_id = ? AND passenger_id = ? AND status = ?", rideID, userID, "active").First(&passenger).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
 			return fmt.Errorf("you have not joined this ride")
 		}
 		return err
 	}
 
-	deleteQuery := `DELETE FROM ride_passengers WHERE ride_id = $1 AND passenger_id = $2`
-	_, err = tx.Exec(deleteQuery, rideID, userID)
-	if err != nil {
-		return err
-	}
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&passenger).Error; err != nil {
+			return err
+		}
 
-	var userName string
-	nameQuery := `SELECT full_name FROM users WHERE id = $1`
-	err = tx.QueryRow(nameQuery, userID).Scan(&userName)
-	if err != nil {
-		userName = "Unknown User"
-	}
+		var user models.User
+		userName := "Unknown User"
+		if err := tx.First(&user, userID).Error; err == nil {
+			userName = user.FullName
+		}
 
-	if err = tx.Commit(); err != nil {
-		return err
-	}
+		if r.notificationSvc != nil {
+			r.notificationSvc.CreateRideLeaveNotification(ride.UserID, rideID, userID, userName)
+		}
 
-	if r.notificationSvc != nil {
-		r.notificationSvc.CreateRideLeaveNotification(ride.UserID, rideID, userID, userName)
-	}
-
-	return nil
+		return nil
+	})
 }
 
-func (r *RideSvc) GetAllUserRides(userID int) (*models.JoinedRidesResp, error) {
+func (r *RideSvc) GetAllUserRides(userID uint) (*models.JoinedRidesResp, error) {
 	createdRides, err := r.getCreatedRidesDetailed(userID)
 	if err != nil {
 		return nil, err
@@ -490,179 +314,111 @@ func (r *RideSvc) GetAllUserRides(userID int) (*models.JoinedRidesResp, error) {
 }
 
 func (r *RideSvc) GetAllRides() ([]models.RideResp, error) {
-	query := `SELECT 
-		r.id, r.user_id, r.car_number, r.car_model, r.passenger_count, r.price, 
-		r.from_location, r.to_location, r.from_latitude, r.from_longitude, 
-		r.to_latitude, r.to_longitude, r.departure_time, r.status, r.created_at, r.updated_at,
-		u.id, u.full_name, u.email, u.phone, u.phone_verified, u.created_at, u.updated_at,
-		COALESCE((SELECT COUNT(*) FROM ride_passengers WHERE ride_id = r.id AND status = 'active'), 0) as joined_count
-	FROM rides r 
-	JOIN users u ON r.user_id = u.id 
-	ORDER BY r.created_at DESC`
-
-	rows, err := r.db.Query(query)
+	var rides []models.Ride
+	err := r.db.Preload("User").Order("created_at DESC").Find(&rides).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	rides := []models.RideResp{}
-	for rows.Next() {
-		var ride models.Ride
-		var user models.User
-		var joinedCount int
+	var rideResponses []models.RideResp
+	for _, ride := range rides {
+		var joinedCount int64
+		r.db.Model(&models.RidePassenger{}).Where("ride_id = ? AND status = ?", ride.ID, "active").Count(&joinedCount)
 
-		err := rows.Scan(
-			&ride.ID, &ride.UserID, &ride.CarNumber, &ride.CarModel,
-			&ride.PassengerCount, &ride.Price, &ride.FromLocation, &ride.ToLocation,
-			&ride.FromLatitude, &ride.FromLongitude, &ride.ToLatitude, &ride.ToLongitude,
-			&ride.DepartureTime, &ride.Status, &ride.CreatedAt, &ride.UpdatedAt,
-			&user.ID, &user.FullName, &user.Email, &user.Phone,
-			&user.PhoneVerified, &user.CreatedAt, &user.UpdatedAt,
-			&joinedCount,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		rides = append(rides, models.RideResp{
+		rideResponses = append(rideResponses, models.RideResp{
 			Ride:           ride,
-			User:           user,
-			AvailableSeats: ride.PassengerCount - joinedCount,
+			User:           ride.User,
+			AvailableSeats: ride.PassengerCount - int(joinedCount),
 		})
 	}
-	return rides, nil
+
+	return rideResponses, nil
 }
 
-func (r *RideSvc) getCreatedRidesDetailed(userID int) ([]models.RideResp, error) {
-	query := `SELECT r.id, r.user_id, r.car_number, r.car_model, r.passenger_count, r.price, 
-			  r.from_location, r.to_location, r.from_latitude, r.from_longitude, 
-			  r.to_latitude, r.to_longitude, r.departure_time, r.status, r.created_at, r.updated_at,
-			  u.id, u.full_name, u.email, u.phone, u.phone_verified, u.created_at, u.updated_at
-			  FROM rides r 
-			  JOIN users u ON r.user_id = u.id 
-			  WHERE r.user_id = $1 
-			  ORDER BY r.created_at DESC`
-
-	rows, err := r.db.Query(query, userID)
+func (r *RideSvc) getCreatedRidesDetailed(userID uint) ([]models.RideResp, error) {
+	var rides []models.Ride
+	err := r.db.Preload("User").Where("user_id = ?", userID).Order("created_at DESC").Find(&rides).Error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	rides := []models.RideResp{}
-	for rows.Next() {
-		var ride models.Ride
-		var user models.User
-
-		err := rows.Scan(&ride.ID, &ride.UserID, &ride.CarNumber, &ride.CarModel,
-			&ride.PassengerCount, &ride.Price, &ride.FromLocation, &ride.ToLocation,
-			&ride.FromLatitude, &ride.FromLongitude, &ride.ToLatitude, &ride.ToLongitude,
-			&ride.DepartureTime, &ride.Status, &ride.CreatedAt, &ride.UpdatedAt,
-			&user.ID, &user.FullName, &user.Email, &user.Phone,
-			&user.PhoneVerified, &user.CreatedAt, &user.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		var joinedCount int
-		countQuery := `SELECT COUNT(*) FROM ride_passengers WHERE ride_id = $1 AND status = 'active'`
-		err = r.db.QueryRow(countQuery, ride.ID).Scan(&joinedCount)
-		if err != nil {
-			joinedCount = 0
-		}
+	var rideResponses []models.RideResp
+	for _, ride := range rides {
+		var joinedCount int64
+		r.db.Model(&models.RidePassenger{}).Where("ride_id = ? AND status = ?", ride.ID, "active").Count(&joinedCount)
 
 		joinedUsers, err := r.getJoinedUsers(ride.ID)
 		if err != nil {
 			joinedUsers = []models.User{}
 		}
 
-		rides = append(rides, models.RideResp{
+		rideResponses = append(rideResponses, models.RideResp{
 			Ride:           ride,
-			User:           user,
+			User:           ride.User,
 			JoinedUsers:    joinedUsers,
-			AvailableSeats: ride.PassengerCount - joinedCount,
+			AvailableSeats: ride.PassengerCount - int(joinedCount),
 		})
 	}
 
-	return rides, nil
+	return rideResponses, nil
 }
 
-func (r *RideSvc) getJoinedRidesDetailed(userID int) ([]models.RideResp, error) {
-	query := `SELECT r.id, r.user_id, r.car_number, r.car_model, r.passenger_count, r.price, 
-			  r.from_location, r.to_location, r.from_latitude, r.from_longitude, 
-			  r.to_latitude, r.to_longitude, r.departure_time, r.status, r.created_at, r.updated_at,
-			  u.id, u.full_name, u.email, u.phone, u.phone_verified, u.created_at, u.updated_at
-			  FROM rides r 
-			  JOIN users u ON r.user_id = u.id 
-			  JOIN ride_passengers rp ON r.id = rp.ride_id
-			  WHERE rp.passenger_id = $1 AND rp.status = 'active'
-			  ORDER BY r.created_at DESC`
+func (r *RideSvc) getJoinedRidesDetailed(userID uint) ([]models.RideResp, error) {
+	var rides []models.Ride
+	err := r.db.Preload("User").
+		Joins("JOIN ride_passengers ON rides.id = ride_passengers.ride_id").
+		Where("ride_passengers.passenger_id = ? AND ride_passengers.status = ?", userID, "active").
+		Order("rides.created_at DESC").
+		Find(&rides).Error
 
-	rows, err := r.db.Query(query, userID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var rides []models.RideResp
-	for rows.Next() {
-		var ride models.Ride
-		var user models.User
+	var rideResponses []models.RideResp
+	for _, ride := range rides {
+		var joinedCount int64
+		r.db.Model(&models.RidePassenger{}).Where("ride_id = ? AND status = ?", ride.ID, "active").Count(&joinedCount)
 
-		err := rows.Scan(&ride.ID, &ride.UserID, &ride.CarNumber, &ride.CarModel,
-			&ride.PassengerCount, &ride.Price, &ride.FromLocation, &ride.ToLocation,
-			&ride.FromLatitude, &ride.FromLongitude, &ride.ToLatitude, &ride.ToLongitude,
-			&ride.DepartureTime, &ride.Status, &ride.CreatedAt, &ride.UpdatedAt,
-			&user.ID, &user.FullName, &user.Email, &user.Phone,
-			&user.PhoneVerified, &user.CreatedAt, &user.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		var joinedCount int
-		countQuery := `SELECT COUNT(*) FROM ride_passengers WHERE ride_id = $1 AND status = 'active'`
-		err = r.db.QueryRow(countQuery, ride.ID).Scan(&joinedCount)
-		if err != nil {
-			joinedCount = 0
-		}
-
-		rides = append(rides, models.RideResp{
+		rideResponses = append(rideResponses, models.RideResp{
 			Ride:           ride,
-			User:           user,
-			AvailableSeats: ride.PassengerCount - joinedCount,
+			User:           ride.User,
+			AvailableSeats: ride.PassengerCount - int(joinedCount),
 		})
 	}
 
-	return rides, nil
+	return rideResponses, nil
 }
 
-func (r *RideSvc) getJoinedUsers(rideID int) ([]models.User, error) {
-	query := `SELECT u.id, u.full_name, u.email, u.phone, u.phone_verified, u.created_at, u.updated_at
-			  FROM users u 
-			  JOIN ride_passengers rp ON u.id = rp.passenger_id
-			  WHERE rp.ride_id = $1 AND rp.status = 'active'`
-
-	rows, err := r.db.Query(query, rideID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
+func (r *RideSvc) getJoinedUsers(rideID uint) ([]models.User, error) {
 	var users []models.User
-	for rows.Next() {
-		var user models.User
-		err := rows.Scan(&user.ID, &user.FullName, &user.Email, &user.Phone,
-			&user.PhoneVerified, &user.CreatedAt, &user.UpdatedAt)
-		if err != nil {
-			return nil, err
-		}
-		users = append(users, user)
+	err := r.db.Joins("JOIN ride_passengers ON users.id = ride_passengers.passenger_id").
+		Where("ride_passengers.ride_id = ? AND ride_passengers.status = ?", rideID, "active").
+		Find(&users).Error
+
+	return users, err
+}
+
+func (r *RideSvc) calculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
+	const earthRadius = 6371
+
+	lat1Rad := lat1 * (3.14159265359 / 180)
+	lon1Rad := lon1 * (3.14159265359 / 180)
+	lat2Rad := lat2 * (3.14159265359 / 180)
+	lon2Rad := lon2 * (3.14159265359 / 180)
+
+	deltaLat := lat2Rad - lat1Rad
+	deltaLon := lon2Rad - lon1Rad
+
+	a := 0.5 - 0.5*((deltaLat*0.5)*(deltaLat*0.5)+(deltaLon*0.5)*(deltaLon*0.5))
+	if a < 0 {
+		a = 0
+	}
+	if a > 1 {
+		a = 1
 	}
 
-	return users, nil
+	return earthRadius * 2 * (a * a)
 }
 
 func (r *RideSvc) getCoordinates(address string) (float64, float64, error) {

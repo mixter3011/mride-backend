@@ -30,7 +30,7 @@ func (h *NotificationHandler) GetNotifications(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-	resp, err := h.notificationSvc.GetUserNotifications(userID.(int), limit, offset)
+	resp, err := h.notificationSvc.GetUserNotifications(uint(userID.(int)), limit, offset)
 	if err != nil {
 		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to fetch notifications")
 		return
@@ -53,7 +53,7 @@ func (h *NotificationHandler) MarkAsRead(c *gin.Context) {
 		return
 	}
 
-	err = h.notificationSvc.MarkAsRead(userID.(int), notificationID)
+	err = h.notificationSvc.MarkAsRead(uint(userID.(int)), uint(notificationID))
 	if err != nil {
 		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to mark notification as read")
 		return
@@ -69,7 +69,7 @@ func (h *NotificationHandler) MarkAllAsRead(c *gin.Context) {
 		return
 	}
 
-	err := h.notificationSvc.MarkAllAsRead(userID.(int))
+	err := h.notificationSvc.MarkAllAsRead(uint(userID.(int)))
 	if err != nil {
 		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to mark all notifications as read")
 		return
@@ -85,7 +85,7 @@ func (h *NotificationHandler) GetUnreadCount(c *gin.Context) {
 		return
 	}
 
-	count, err := h.notificationSvc.GetUnreadCount(userID.(int))
+	count, err := h.notificationSvc.GetUnreadCount(uint(userID.(int)))
 	if err != nil {
 		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to get unread count")
 		return

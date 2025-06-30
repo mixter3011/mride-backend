@@ -5,30 +5,37 @@ import (
 )
 
 type Ride struct {
-	ID             int       `json:"id" db:"id"`
-	UserID         int       `json:"user_id" db:"user_id"`
-	CarNumber      string    `json:"car_number" db:"car_number"`
-	CarModel       string    `json:"car_model" db:"car_model"`
-	PassengerCount int       `json:"passenger_count" db:"passenger_count"`
-	Price          *float64  `json:"price" db:"price"`
-	FromLocation   string    `json:"from_location" db:"from_location"`
-	ToLocation     string    `json:"to_location" db:"to_location"`
-	FromLatitude   float64   `json:"from_latitude" db:"from_latitude"`
-	FromLongitude  float64   `json:"from_longitude" db:"from_longitude"`
-	ToLatitude     float64   `json:"to_latitude" db:"to_latitude"`
-	ToLongitude    float64   `json:"to_longitude" db:"to_longitude"`
-	DepartureTime  time.Time `json:"departure_time" db:"departure_time"`
-	Status         string    `json:"status" db:"status"`
-	CreatedAt      time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at" db:"updated_at"`
+	ID             uint      `json:"id" gorm:"primaryKey"`
+	UserID         uint      `json:"user_id" gorm:"not null;index"`
+	CarNumber      string    `json:"car_number" gorm:"size:20;not null"`
+	CarModel       string    `json:"car_model" gorm:"size:50;not null"`
+	PassengerCount int       `json:"passenger_count" gorm:"not null;check:passenger_count > 0 AND passenger_count <= 8"`
+	Price          *float64  `json:"price" gorm:"check:price >= 0"`
+	FromLocation   string    `json:"from_location" gorm:"size:255;not null"`
+	ToLocation     string    `json:"to_location" gorm:"size:255;not null"`
+	FromLatitude   float64   `json:"from_latitude" gorm:"not null"`
+	FromLongitude  float64   `json:"from_longitude" gorm:"not null"`
+	ToLatitude     float64   `json:"to_latitude" gorm:"not null"`
+	ToLongitude    float64   `json:"to_longitude" gorm:"not null"`
+	DepartureTime  time.Time `json:"departure_time" gorm:"not null;index"`
+	Status         string    `json:"status" gorm:"size:20;default:'active';index"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+
+	User       User            `json:"driver,omitempty" gorm:"foreignKey:UserID"`
+	Passengers []RidePassenger `json:"passengers,omitempty" gorm:"foreignKey:RideID"`
 }
 
 type RidePassenger struct {
-	ID          int       `json:"id" db:"id"`
-	RideID      int       `json:"ride_id" db:"ride_id"`
-	PassengerID int       `json:"passenger_id" db:"passenger_id"`
-	JoinedAt    time.Time `json:"joined_at" db:"joined_at"`
-	Status      string    `json:"status" db:"status"`
+	ID          uint      `json:"id" gorm:"primaryKey"`
+	RideID      uint      `json:"ride_id" gorm:"not null;index"`
+	PassengerID uint      `json:"passenger_id" gorm:"not null;index"`
+	Status      string    `json:"status" gorm:"size:20;default:'active'"`
+	CreatedAt   time.Time `json:"joined_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+
+	Ride      Ride `json:"ride,omitempty" gorm:"foreignKey:RideID"`
+	Passenger User `json:"passenger,omitempty" gorm:"foreignKey:PassengerID"`
 }
 
 type CreateRideReq struct {
@@ -55,11 +62,10 @@ type NearbyRidesReq struct {
 }
 
 type RideResp struct {
-	Ride           Ride            `json:"ride"`
-	User           User            `json:"driver"`
-	Passengers     []RidePassenger `json:"passengers,omitempty"`
-	JoinedUsers    []User          `json:"joined_users,omitempty"`
-	AvailableSeats int             `json:"available_seats"`
+	Ride           Ride   `json:"ride"`
+	User           User   `json:"driver"`
+	JoinedUsers    []User `json:"joined_users,omitempty"`
+	AvailableSeats int    `json:"available_seats"`
 }
 
 type JoinedRidesResp struct {

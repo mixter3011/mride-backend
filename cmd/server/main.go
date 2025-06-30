@@ -25,26 +25,27 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
-	defer database.Close()
 
-	if err := database.Migrate(); err != nil {
-		log.Fatal("Failed to migrate database:", err)
+	sqlDB, err := database.DB()
+	if err != nil {
+		log.Fatal("Failed to get underlying sql.DB:", err)
 	}
+	defer sqlDB.Close()
 
-	jwtSvc := services.NewJWTSvc(cfg.JWTSecret)
-	authSvc := services.NewAuthSvc(database.DB, jwtSvc)
-	otpSvc := services.NewOTPSvc(database.DB, cfg.TwilioSID, cfg.TwilioToken, cfg.TwilioPhone)
+	jwtSvc := services.NewJWTSvc(cfg.JWTSecret, database)
+	authSvc := services.NewAuthSvc(database, jwtSvc)
+	otpSvc := services.NewOTPSvc(database, cfg.TwilioSID, cfg.TwilioToken, cfg.TwilioPhone)
 
-	fcmSvc, err := services.NewFCMSvc(database.DB, cfg.FirebaseCredentials, cfg.FirebaseProjectID)
+	fcmSvc, err := services.NewFCMSvc(database, cfg.FirebaseCredentials, cfg.FirebaseProjectID)
 	if err != nil {
 		log.Printf("Failed to initialize FCM service: %v", err)
 		fcmSvc = nil
 	}
 
-	webSocketSvc := services.NewWebSocketSvc()
+	webSocketSvc := services.NewWebSocketSvc(database)
 
-	notificationSvc := services.NewNotificationSvc(database.DB, fcmSvc, webSocketSvc)
-	rideSvc := services.NewRideSvc(database.DB, notificationSvc)
+	notificationSvc := services.NewNotificationSvc(database, fcmSvc, webSocketSvc)
+	rideSvc := services.NewRideSvc(database, notificationSvc)
 
 	authHandler := handlers.NewAuthHandler(authSvc, otpSvc)
 	otpHandler := handlers.NewOTPHandler(otpSvc, authSvc)
@@ -88,6 +89,10 @@ func main() {
 		protected.DELETE("/fcm/token", fcmHandler.RemoveFCMToken)
 
 		protected.GET("/users/online", webSocketHandler.GetOnlineUsers)
+		protected.GET("/ws/online-db", webSocketHandler.GetOnlineUsersFromDB)
+		protected.GET("/ws/history/:user_id", webSocketHandler.GetUserConnectionHistory)
+		protected.GET("/ws/stats", webSocketHandler.GetConnectionStats)
+		protected.POST("/ws/cleanup", webSocketHandler.CleanupStaleConnections)
 	}
 
 	r.GET("/ws", middleware.WebSocketAuthMiddleware(jwtSvc), webSocketHandler.HandleWebSocket)
