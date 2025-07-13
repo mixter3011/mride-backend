@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: mride-backend-prod
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - PORT=8080
+      - GIN_MODE=release
+      - DATABASE_URL=${DB_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - TWILIO_SID=${TWILIO_SID}
+      - TWILIO_TOKEN=${TWILIO_TOKEN}
+      - TWILIO_PHONE=${TWILIO_PHONE}
+      - FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS}
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mride-backend.rule=Host(`mride.senachi.me`)"
+      - "traefik.http.routers.mride-backend.entrypoints=websecure"
+      - "traefik.http.routers.mride-backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.mride-backend.loadbalancer.server.port=8080"
+      - "traefik.http.routers.mride-backend-http.rule=Host(`mride.senachi.me`)"
+      - "traefik.http.routers.mride-backend-http.entrypoints=web"
+      - "traefik.http.routers.mride-backend-http.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+    networks:
+      - traefik
+
+networks:
+  traefik:
+    external: true

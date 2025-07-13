@@ -19,6 +19,8 @@ import (
 )
 
 func main() {
+	gin.SetMode(gin.ReleaseMode)
+
 	cfg := config.Load()
 
 	database, err := db.New(cfg.DBUrl)
@@ -31,6 +33,10 @@ func main() {
 		log.Fatal("Failed to get underlying sql.DB:", err)
 	}
 	defer sqlDB.Close()
+
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(25)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 
 	jwtSvc := services.NewJWTSvc(cfg.JWTSecret, database)
 	authSvc := services.NewAuthSvc(database, jwtSvc)
@@ -54,7 +60,36 @@ func main() {
 	fcmHandler := handlers.NewFCMHandler(notificationSvc)
 	webSocketHandler := handlers.NewWebSocketHandler(webSocketSvc, jwtSvc)
 
-	r := gin.Default()
+	r := gin.New()
+
+	r.Use(gin.Logger())
+	r.Use(gin.Recovery())
+	r.Use(middleware.CORSMiddleware())
+	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.RateLimitMiddleware())
+
+	r.GET("/health", func(c *gin.Context) {
+		if err := sqlDB.Ping(); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status":   "unhealthy",
+				"database": "disconnected",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"status":   "healthy",
+			"database": "connected",
+		})
+	})
+
+	r.HEAD("/health", func(c *gin.Context) {
+		if err := sqlDB.Ping(); err != nil {
+			c.Status(http.StatusServiceUnavailable)
+			return
+		}
+		c.Status(http.StatusOK)
+	})
 
 	r.POST("/auth/signup", authHandler.SignUp)
 	r.POST("/auth/signin", authHandler.SignIn)
@@ -102,8 +137,12 @@ func main() {
 	r.GET("/ws", middleware.WebSocketAuthMiddleware(jwtSvc), webSocketHandler.HandleWebSocket)
 
 	srv := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: r,
+		Addr:           ":" + cfg.Port,
+		Handler:        r,
+		ReadTimeout:    15 * time.Second,
+		WriteTimeout:   15 * time.Second,
+		IdleTimeout:    60 * time.Second,
+		MaxHeaderBytes: 1 << 20,
 	}
 
 	go func() {
