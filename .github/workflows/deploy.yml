@@ -8,30 +8,24 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-      
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.23'
-      
       - name: Lint (golangci-lint)
         uses: golangci/golangci-lint-action@v3
         with:
           version: latest
           args: --timeout=5m --out-format=colored-line-number
-        continue-on-error: true  
-      
+        continue-on-error: true
       - name: Run Tests
         run: go test ./...
-      
       - name: Compile Check
         run: go build ./...
-      
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-      
       - name: Deploy to Droplet with Rollback Support
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
@@ -46,22 +40,30 @@ jobs:
           echo "[STEP] Restarting containers..."
           docker compose -f docker-compose.prod.yml --env-file .env down
           docker compose -f docker-compose.prod.yml --env-file .env up -d
-          echo "[STEP] Checking health..."
-          sleep 5
-          if ! curl -fsSL https://mride.senachi.me/health; then
-            echo "[ERROR] Health check failed! Rolling back..."
-            if [ -f .last-successful-deploy ]; then
-              git reset --hard $(cat .last-successful-deploy)
-              docker compose -f docker-compose.prod.yml --env-file .env build
-              docker compose -f docker-compose.prod.yml --env-file .env down
-              docker compose -f docker-compose.prod.yml --env-file .env up -d
-              echo "[ROLLBACK] Completed."
-              exit 1
-            else
-              echo "[FATAL] No rollback point available!"
-              exit 1
+          echo "[STEP] Checking container status..."
+          docker compose -f docker-compose.prod.yml --env-file .env ps
+          echo "[STEP] Checking health with retries..."
+          for i in {1..6}; do
+            if curl -fsSL https://mride.senachi.me/health; then
+              echo "[SUCCESS] Health check passed on attempt $i"
+              break
             fi
-          else
-            echo "[SUCCESS] Deployment passed health check."
-          fi
+            if [ $i -eq 6 ]; then
+              echo "[ERROR] Health check failed after 6 attempts! Rolling back..."
+              if [ -f .last-successful-deploy ]; then
+                git reset --hard $(cat .last-successful-deploy)
+                docker compose -f docker-compose.prod.yml --env-file .env build
+                docker compose -f docker-compose.prod.yml --env-file .env down
+                docker compose -f docker-compose.prod.yml --env-file .env up -d
+                echo "[ROLLBACK] Completed."
+                exit 1
+              else
+                echo "[FATAL] No rollback point available!"
+                exit 1
+              fi
+            fi
+            echo "[RETRY] Health check attempt $i failed, retrying in 10 seconds..."
+            sleep 10
+          done
+          echo "[SUCCESS] Deployment completed successfully."
           EOF
