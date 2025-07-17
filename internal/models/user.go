@@ -5,16 +5,18 @@ import (
 )
 
 type User struct {
-	ID            uint      `gorm:"primaryKey" json:"id"`
-	FullName      string    `gorm:"not null" json:"full_name"`
-	Email         string    `gorm:"uniqueIndex;not null" json:"email"`
-	PasswordHash  string    `gorm:"not null" json:"-"`
-	Phone         *string   `gorm:"uniqueIndex" json:"phone"`
-	PhoneVerified bool      `gorm:"default:false" json:"phone_verified"`
-	Latitude      *float64  `json:"latitude"`
-	Longitude     *float64  `json:"longitude"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID                 uint      `gorm:"primaryKey" json:"id"`
+	FullName           string    `gorm:"not null" json:"full_name"`
+	Email              string    `gorm:"uniqueIndex;not null" json:"email"`
+	PasswordHash       string    `gorm:"not null" json:"-"`
+	Phone              *string   `gorm:"uniqueIndex" json:"phone"`
+	PhoneVerified      bool      `gorm:"default:false" json:"phone_verified"`
+	Latitude           *float64  `json:"latitude"`
+	Longitude          *float64  `json:"longitude"`
+	RefreshToken       string    `gorm:"type:text" json:"-"`
+	RefreshTokenExpiry time.Time `json:"-"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 type UpdateProfileReq struct {
 	FullName string `json:"full_name"`
@@ -60,8 +62,9 @@ type OTPVerifyReq struct {
 	Code  string `json:"code" binding:"required,len=6"`
 }
 type AuthResp struct {
-	Token string `json:"token"`
-	User  User   `json:"user"`
+	Token        string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
+	User         User   `json:"user"`
 }
 type OTP struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`

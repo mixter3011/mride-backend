@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"mride-backend/internal/models"
 	"mride-backend/internal/services"
@@ -12,10 +13,10 @@ import (
 
 type AuthHandler struct {
 	authSvc *services.AuthSvc
-	otpSvc  *services.OTPSvc
+	otpSvc  services.OTPService
 }
 
-func NewAuthHandler(authSvc *services.AuthSvc, otpSvc *services.OTPSvc) *AuthHandler {
+func NewAuthHandler(authSvc *services.AuthSvc, otpSvc services.OTPService) *AuthHandler {
 	return &AuthHandler{
 		authSvc: authSvc,
 		otpSvc:  otpSvc,
@@ -311,4 +312,61 @@ func (h *AuthHandler) VerifyPhone(c *gin.Context) {
 	}
 
 	utils.SuccJSON(c, "Phone verified successfully", nil)
+}
+
+func (h *AuthHandler) RefreshToken(c *gin.Context) {
+	var req struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.RefreshToken == "" {
+		utils.ErrJSON(c, http.StatusBadRequest, "Refresh token required")
+		return
+	}
+
+	claims, err := h.authSvc.ValidateRefreshToken(req.RefreshToken)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusUnauthorized, "Invalid refresh token")
+		return
+	}
+
+	user, err := h.authSvc.GetUserByID(claims.UserID)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not found")
+		return
+	}
+
+	if user.RefreshToken != req.RefreshToken {
+		utils.ErrJSON(c, http.StatusUnauthorized, "Refresh token mismatch")
+		return
+	}
+
+	if time.Now().After(user.RefreshTokenExpiry) {
+		utils.ErrJSON(c, http.StatusUnauthorized, "Refresh token expired")
+		return
+	}
+
+	newAccessToken, err := h.authSvc.GenToken(int(user.ID), user.Email)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusInternalServerError, "Could not generate access token")
+		return
+	}
+
+	utils.SuccJSON(c, "Token refreshed", gin.H{
+		"token": newAccessToken,
+	})
+}
+
+func (h *AuthHandler) Logout(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	if err := h.authSvc.Logout(userID.(int)); err != nil {
+		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to logout")
+		return
+	}
+
+	utils.SuccJSON(c, "Logged out successfully", nil)
 }

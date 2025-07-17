@@ -11,11 +11,11 @@ import (
 )
 
 type OTPHandler struct {
-	otpSvc  *services.OTPSvc
+	otpSvc  services.OTPService
 	authSvc *services.AuthSvc
 }
 
-func NewOTPHandler(otpSvc *services.OTPSvc, authSvc *services.AuthSvc) *OTPHandler {
+func NewOTPHandler(otpSvc services.OTPService, authSvc *services.AuthSvc) *OTPHandler {
 	return &OTPHandler{
 		otpSvc:  otpSvc,
 		authSvc: authSvc,

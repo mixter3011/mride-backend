@@ -98,3 +98,5 @@ func (o *OTPSvc) SendOTP(phone, code string) error {
 
 	return nil
 }
+
+var _ OTPService = (*OTPSvc)(nil)

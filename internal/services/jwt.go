@@ -57,3 +57,15 @@ func (j *JWTSvc) ValidToken(tokenStr string) (*Claims, error) {
 
 	return claims, nil
 }
+
+func (j *JWTSvc) GenRefreshToken(userID int) (string, error) {
+	claims := &Claims{
+		UserID: userID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(j.secret)
+}

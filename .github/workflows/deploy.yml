@@ -1,0 +1,74 @@
+name: CI/CD for Go Backend
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.23' 
+
+    - name: Lint (golangci-lint)
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest
+
+    - name: Run Tests
+      run: go test ./...
+
+    - name: Compile Check
+      run: go build ./...
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    - name: Deploy to Droplet with Rollback Support
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          set -e
+
+          cd ~/mride-backend
+
+          echo "[STEP] Storing current commit SHA..."
+          git rev-parse HEAD > .last-successful-deploy
+
+          echo "[STEP] Pulling latest code..."
+          git fetch origin main && git reset --hard origin/main
+
+          echo "[STEP] Rebuilding containers..."
+          docker compose -f docker-compose.prod.yml --env-file .env build
+
+          echo "[STEP] Restarting containers..."
+          docker compose -f docker-compose.prod.yml --env-file .env down
+          docker compose -f docker-compose.prod.yml --env-file .env up -d
+
+          echo "[STEP] Checking health..."
+          sleep 5
+          if ! curl -fsSL https://mride.senachi.me/health; then
+            echo "[ERROR] Health check failed! Rolling back..."
+            if [ -f .last-successful-deploy ]; then
+              git reset --hard \$(cat .last-successful-deploy)
+              docker compose -f docker-compose.prod.yml --env-file .env build
+              docker compose -f docker-compose.prod.yml --env-file .env down
+              docker compose -f docker-compose.prod.yml --env-file .env up -d
+              echo "[ROLLBACK] Completed."
+              exit 1
+            else
+              echo "[FATAL] No rollback point available!"
+              exit 1
+            fi
+          else
+            echo "[SUCCESS] Deployment passed health check."
+          fi
+        EOF

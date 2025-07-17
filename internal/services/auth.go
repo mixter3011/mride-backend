@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"time"
 
 	"mride-backend/internal/models"
 	"mride-backend/internal/utils"
@@ -49,14 +50,27 @@ func (a *AuthSvc) SignUp(req models.SignUpReq) (*models.AuthResp, error) {
 		return nil, err
 	}
 
-	token, err := a.jwtSvc.GenToken(int(user.ID), user.Email)
+	accessToken, err := a.jwtSvc.GenToken(int(user.ID), user.Email)
 	if err != nil {
 		return nil, err
 	}
 
+	refreshToken, err := a.jwtSvc.GenRefreshToken(int(user.ID))
+	if err != nil {
+		return nil, err
+	}
+
+	user.RefreshToken = refreshToken
+	user.RefreshTokenExpiry = time.Now().Add(7 * 24 * time.Hour)
+
+	if err := a.db.Save(&user).Error; err != nil {
+		return nil, err
+	}
+
 	return &models.AuthResp{
-		Token: token,
-		User:  user,
+		Token:        accessToken,
+		RefreshToken: refreshToken,
+		User:         user,
 	}, nil
 }
 
@@ -73,14 +87,27 @@ func (a *AuthSvc) SignIn(req models.SignInReq) (*models.AuthResp, error) {
 		return nil, fmt.Errorf("invalid credentials")
 	}
 
-	token, err := a.jwtSvc.GenToken(int(user.ID), user.Email)
+	accessToken, err := a.jwtSvc.GenToken(int(user.ID), user.Email)
 	if err != nil {
 		return nil, err
 	}
 
+	refreshToken, err := a.jwtSvc.GenRefreshToken(int(user.ID))
+	if err != nil {
+		return nil, err
+	}
+
+	user.RefreshToken = refreshToken
+	user.RefreshTokenExpiry = time.Now().Add(7 * 24 * time.Hour)
+
+	if err := a.db.Save(&user).Error; err != nil {
+		return nil, err
+	}
+
 	return &models.AuthResp{
-		Token: token,
-		User:  user,
+		Token:        accessToken,
+		RefreshToken: refreshToken,
+		User:         user,
 	}, nil
 }
 
@@ -187,4 +214,23 @@ func (a *AuthSvc) UpdatePhone(userID int, phone string) error {
 
 func (a *AuthSvc) VerifyPhone(userID int) error {
 	return a.db.Model(&models.User{}).Where("id = ?", userID).Update("phone_verified", true).Error
+}
+
+func (a *AuthSvc) ValidateRefreshToken(token string) (*Claims, error) {
+	return a.jwtSvc.ValidToken(token)
+}
+
+func (a *AuthSvc) GenToken(userID int, email string) (string, error) {
+	return a.jwtSvc.GenToken(userID, email)
+}
+
+func (a *AuthSvc) Logout(userID int) error {
+	return a.db.Model(&models.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"refresh_token":        "",
+		"refresh_token_expiry": time.Time{},
+	}).Error
+}
+
+func (a *AuthSvc) GetDB() *gorm.DB {
+	return a.db
 }
