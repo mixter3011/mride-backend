@@ -151,6 +151,11 @@ func NewFCMSvc(db *gorm.DB, firebaseCredentialsPath, projectID string) (*FCMSvc,
 }
 
 func (f *FCMSvc) SaveFCMToken(userID int, req FCMTokenReq) error {
+	if req.FCMToken == "" {
+		log.Printf("Empty FCM token provided for user %d, skipping save", userID)
+		return nil
+	}
+
 	token := UserFCMToken{
 		UserID:   userID,
 		FCMToken: req.FCMToken,
