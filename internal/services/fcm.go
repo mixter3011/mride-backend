@@ -23,7 +23,7 @@ type FCMSvc struct {
 }
 
 type FCMTokenReq struct {
-	FCMToken string `json:"fcm_token" binding:"required"`
+	FCMToken string `json:"fcm_token"`
 	DeviceID string `json:"device_id"`
 	Platform string `json:"platform" binding:"required,oneof=android ios web"`
 }
