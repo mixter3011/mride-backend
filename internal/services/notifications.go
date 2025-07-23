@@ -3,7 +3,6 @@ package services
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"mride-backend/internal/models"
 
@@ -12,14 +11,12 @@ import (
 
 type NotificationSvc struct {
 	db           *gorm.DB
-	fcmSvc       *FCMSvc
 	webSocketSvc *WebSocketSvc
 }
 
-func NewNotificationSvc(db *gorm.DB, fcmSvc *FCMSvc, webSocketSvc *WebSocketSvc) *NotificationSvc {
+func NewNotificationSvc(db *gorm.DB, webSocketSvc *WebSocketSvc) *NotificationSvc {
 	return &NotificationSvc{
 		db:           db,
-		fcmSvc:       fcmSvc,
 		webSocketSvc: webSocketSvc,
 	}
 }
@@ -147,20 +144,6 @@ func (n *NotificationSvc) createAndSendNotification(userID uint, notificationTyp
 		} else {
 			fmt.Printf("WebSocket notification sent to user %d\n", userID)
 		}
-	} else if n.fcmSvc != nil {
-		fcmData := FCMNotificationData{
-			RideID:     strconv.FormatUint(uint64(data.RideID), 10),
-			UserID:     strconv.FormatUint(uint64(data.UserID), 10),
-			UserName:   data.UserName,
-			ActionType: data.ActionType,
-			Type:       notificationType,
-		}
-
-		go func() {
-			if err := n.fcmSvc.SendToUser(int(userID), title, message, fcmData); err != nil {
-				fmt.Printf("Failed to send FCM notification: %v\n", err)
-			}
-		}()
 	}
 
 	return nil
@@ -211,18 +194,4 @@ func (n *NotificationSvc) GetUnreadCount(userID uint) (int, error) {
 		Where("user_id = ? AND read = ?", userID, false).
 		Count(&count).Error
 	return int(count), err
-}
-
-func (n *NotificationSvc) SaveFCMToken(userID uint, req FCMTokenReq) error {
-	if n.fcmSvc == nil {
-		return fmt.Errorf("FCM service not available")
-	}
-	return n.fcmSvc.SaveFCMToken(int(userID), req)
-}
-
-func (n *NotificationSvc) RemoveFCMToken(userID uint, deviceID string) error {
-	if n.fcmSvc == nil {
-		return fmt.Errorf("FCM service not available")
-	}
-	return n.fcmSvc.RemoveUserToken(int(userID), deviceID)
 }

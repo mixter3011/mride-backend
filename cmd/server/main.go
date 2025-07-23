@@ -42,22 +42,15 @@ func main() {
 	authSvc := services.NewAuthSvc(database, jwtSvc)
 	otpSvc := services.NewOTPSvc(database, cfg.TwilioSID, cfg.TwilioToken, cfg.TwilioPhone)
 
-	fcmSvc, err := services.NewFCMSvc(database, cfg.FirebaseCredentials, cfg.FirebaseProjectID)
-	if err != nil {
-		log.Printf("Failed to initialize FCM service: %v", err)
-		fcmSvc = nil
-	}
-
 	webSocketSvc := services.NewWebSocketSvc(database)
 
-	notificationSvc := services.NewNotificationSvc(database, fcmSvc, webSocketSvc)
+	notificationSvc := services.NewNotificationSvc(database, webSocketSvc)
 	rideSvc := services.NewRideSvc(database, notificationSvc)
 
 	authHandler := handlers.NewAuthHandler(authSvc, otpSvc)
 	otpHandler := handlers.NewOTPHandler(otpSvc, authSvc)
 	rideHandler := handlers.NewRideHandler(rideSvc)
 	notificationHandler := handlers.NewNotificationHandler(notificationSvc)
-	fcmHandler := handlers.NewFCMHandler(notificationSvc)
 	webSocketHandler := handlers.NewWebSocketHandler(webSocketSvc, jwtSvc)
 
 	r := gin.New()
@@ -126,9 +119,6 @@ func main() {
 		protected.PUT("/notifications/:id/read", notificationHandler.MarkAsRead)
 		protected.PUT("/notifications/read-all", notificationHandler.MarkAllAsRead)
 		protected.GET("/notifications/unread-count", notificationHandler.GetUnreadCount)
-
-		protected.POST("/fcm/token", fcmHandler.SaveFCMToken)
-		protected.DELETE("/fcm/token", fcmHandler.RemoveFCMToken)
 
 		protected.GET("/users/online", webSocketHandler.GetOnlineUsers)
 		protected.GET("/ws/online-db", webSocketHandler.GetOnlineUsersFromDB)
