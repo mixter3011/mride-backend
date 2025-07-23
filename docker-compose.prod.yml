@@ -1,6 +1,31 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: postgres:15
+    container_name: mride-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    ports:
+      - "5432:5432"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - traefik
+
   app:
     build: .
     container_name: mride-backend-prod
@@ -9,13 +34,16 @@ services:
     environment:
       - PORT=8080
       - GIN_MODE=release
-      - DATABASE_URL=${DB_URL}
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}?sslmode=disable
       - JWT_SECRET=${JWT_SECRET}
       - TWILIO_SID=${TWILIO_SID}
       - TWILIO_TOKEN=${TWILIO_TOKEN}
       - TWILIO_PHONE=${TWILIO_PHONE}
       - FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS}
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+    depends_on:
+      postgres:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.mride-backend.rule=Host(`mride.senachi.me`)"
@@ -28,6 +56,9 @@ services:
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
     networks:
       - traefik
+
+volumes:
+  postgres_data:
 
 networks:
   traefik:
