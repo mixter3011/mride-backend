@@ -11,10 +11,10 @@ import (
 
 type NotificationSvc struct {
 	db           *gorm.DB
-	webSocketSvc *WebSocketSvc
+	webSocketSvc WebSocketInterface
 }
 
-func NewNotificationSvc(db *gorm.DB, webSocketSvc *WebSocketSvc) *NotificationSvc {
+func NewNotificationSvc(db *gorm.DB, webSocketSvc WebSocketInterface) *NotificationSvc {
 	return &NotificationSvc{
 		db:           db,
 		webSocketSvc: webSocketSvc,
@@ -195,3 +195,5 @@ func (n *NotificationSvc) GetUnreadCount(userID uint) (int, error) {
 		Count(&count).Error
 	return int(count), err
 }
+
+var _ NotificationSvcInterface = (*NotificationSvc)(nil)

@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -15,10 +16,10 @@ import (
 
 type RideSvc struct {
 	db              *gorm.DB
-	notificationSvc *NotificationSvc
+	notificationSvc NotificationSvcInterface
 }
 
-func NewRideSvc(db *gorm.DB, notificationSvc *NotificationSvc) *RideSvc {
+func NewRideSvc(db *gorm.DB, notificationSvc NotificationSvcInterface) *RideSvc {
 	return &RideSvc{
 		db:              db,
 		notificationSvc: notificationSvc,
@@ -147,7 +148,7 @@ func (r *RideSvc) GetRideByID(rideID uint) (*models.RideResp, error) {
 func (r *RideSvc) SearchRides(from, to string) ([]models.RideResp, error) {
 	var rides []models.Ride
 	err := r.db.Preload("User").
-		Where("status = ? AND departure_time > ? AND from_location ILIKE ? AND to_location ILIKE ?",
+		Where("status = ? AND departure_time > ? AND UPPER(from_location) LIKE UPPER(?) AND UPPER(to_location) LIKE UPPER(?)",
 			"active", time.Now(), "%"+from+"%", "%"+to+"%").
 		Find(&rides).Error
 
@@ -220,7 +221,11 @@ func (r *RideSvc) JoinRide(userID, rideID uint) error {
 	}
 
 	var existing models.RidePassenger
-	if err := r.db.Where("ride_id = ? AND passenger_id = ? AND status = ?", rideID, userID, "active").First(&existing).Error; err == nil {
+	err := r.db.Where("ride_id = ? AND passenger_id = ? AND status = ?", rideID, userID, "active").First(&existing).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if err == nil {
 		return fmt.Errorf("you have already joined this ride")
 	}
 
@@ -270,8 +275,9 @@ func (r *RideSvc) LeaveRide(userID, rideID uint) error {
 	}
 
 	var passenger models.RidePassenger
-	if err := r.db.Where("ride_id = ? AND passenger_id = ? AND status = ?", rideID, userID, "active").First(&passenger).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	err := r.db.Where("ride_id = ? AND passenger_id = ? AND status = ?", rideID, userID, "active").First(&passenger).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("you have not joined this ride")
 		}
 		return err

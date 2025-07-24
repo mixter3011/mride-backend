@@ -223,8 +223,12 @@ func (ws *WebSocketSvc) checkRateLimit(clientIP string) bool {
 
 func (c *Client) cleanup(ws *WebSocketSvc) {
 	c.cancel()
-	close(c.send)
-	c.conn.Close()
+	if c.send != nil {
+		close(c.send)
+	}
+	if c.conn != nil {
+		c.conn.Close()
+	}
 
 	disconnectedAt := time.Now()
 	duration := int64(disconnectedAt.Sub(c.connectedAt).Seconds())
@@ -377,8 +381,8 @@ func (ws *WebSocketSvc) GetOnlineUsers() []int {
 
 func (ws *WebSocketSvc) GetOnlineUsersFromDB() ([]UserConnection, error) {
 	var connections []UserConnection
-	err := ws.db.Where("is_active = ? AND last_pong > ?", true, time.Now().Add(-pongWait)).
-		Find(&connections).Error
+	cutoff := time.Now().Add(-pongWait)
+	err := ws.db.Where("is_active = ? AND last_pong > ?", true, cutoff).Find(&connections).Error
 	return connections, err
 }
 
@@ -439,3 +443,5 @@ func (ws *WebSocketSvc) Shutdown() {
 
 	log.Println("WebSocket service shutdown complete")
 }
+
+var _ WebSocketInterface = (*WebSocketSvc)(nil)
