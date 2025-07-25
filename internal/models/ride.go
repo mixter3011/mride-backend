@@ -81,7 +81,9 @@ type GeocodingResp struct {
 	Status string `json:"status"`
 }
 type StartRideReq struct {
-	EstimatedDuration int `json:"estimated_duration" binding:"required,min=1,max=600"`
+	EstimatedDuration int     `json:"estimated_duration" binding:"required,min=1,max=600"`
+	Latitude          float64 `json:"latitude"`
+	Longitude         float64 `json:"longitude"`
 }
 type RideStatusUpdateReq struct {
 	RemainingTime int     `json:"remaining_time"`

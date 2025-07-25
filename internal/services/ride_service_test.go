@@ -882,10 +882,11 @@ func TestGetAllUserRides(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Len(t, resp.CreatedRides, 1)
-	assert.Len(t, resp.JoinedRides, 1)
-	assert.Equal(t, createdRide.ID, resp.CreatedRides[0].Ride.ID)
-	assert.Equal(t, joinedRide.ID, resp.JoinedRides[0].Ride.ID)
+	assert.Len(t, resp, 2)
+
+	rideIDs := []uint{resp[0].Ride.ID, resp[1].Ride.ID}
+	assert.Contains(t, rideIDs, createdRide.ID)
+	assert.Contains(t, rideIDs, joinedRide.ID)
 }
 func TestGetAllRides(t *testing.T) {
 	db := setupRideTestDB(t)

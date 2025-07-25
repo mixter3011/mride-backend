@@ -5,17 +5,31 @@ import (
 	"strconv"
 
 	"mride-backend/internal/models"
-	"mride-backend/internal/services"
 	"mride-backend/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
 
+type RideService interface {
+	CreateRide(userID uint, req models.CreateRideReq) (*models.RideResp, error)
+	DeleteRide(userID, rideID uint) error
+	GetAllUserRides(userID uint) ([]models.RideResp, error)
+	GetRideByID(rideID uint) (*models.RideResp, error)
+	SearchRides(from, to string) ([]models.RideResp, error)
+	GetNearbyRides(userID uint, req models.NearbyRidesReq) ([]models.RideResp, error)
+	JoinRide(userID, rideID uint) error
+	LeaveRide(userID, rideID uint) error
+	GetAllRides() ([]models.RideResp, error)
+	StartRide(userID, rideID uint, req models.StartRideReq) error
+	CompleteRide(userID, rideID uint) error
+	GetRideProgress(rideID uint) (*models.RideProgressResp, error)
+	GetActiveRidesForUser(userID uint) ([]models.RideProgressResp, error)
+}
 type RideHandler struct {
-	rideSvc *services.RideSvc
+	rideSvc RideService
 }
 
-func NewRideHandler(rideSvc *services.RideSvc) *RideHandler {
+func NewRideHandler(rideSvc RideService) *RideHandler {
 	return &RideHandler{
 		rideSvc: rideSvc,
 	}
@@ -31,21 +45,6 @@ func (h *RideHandler) CreateRide(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
 		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
-		return
-	}
-
-	if req.CarNumber == "" {
-		utils.ErrJSON(c, http.StatusBadRequest, "Car number is required")
-		return
-	}
-
-	if req.CarModel == "" {
-		utils.ErrJSON(c, http.StatusBadRequest, "Car model is required")
-		return
-	}
-
-	if req.PassengerCount < 1 || req.PassengerCount > 8 {
-		utils.ErrJSON(c, http.StatusBadRequest, "Passenger count must be between 1 and 8")
 		return
 	}
 

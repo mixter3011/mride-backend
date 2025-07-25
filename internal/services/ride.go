@@ -302,21 +302,18 @@ func (r *RideSvc) LeaveRide(userID, rideID uint) error {
 	})
 }
 
-func (r *RideSvc) GetAllUserRides(userID uint) (*models.JoinedRidesResp, error) {
+func (r *RideSvc) GetAllUserRides(userID uint) ([]models.RideResp, error) {
 	createdRides, err := r.getCreatedRidesDetailed(userID)
 	if err != nil {
 		return nil, err
 	}
-
 	joinedRides, err := r.getJoinedRidesDetailed(userID)
 	if err != nil {
 		return nil, err
 	}
 
-	return &models.JoinedRidesResp{
-		CreatedRides: createdRides,
-		JoinedRides:  joinedRides,
-	}, nil
+	allRides := append(createdRides, joinedRides...)
+	return allRides, nil
 }
 
 func (r *RideSvc) GetAllRides() ([]models.RideResp, error) {
