@@ -247,7 +247,9 @@ func TestRefreshTokenHandler(t *testing.T) {
 
 func TestPhoneUpdateFlow(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	db.AutoMigrate(&models.User{}, &models.OTP{}, &models.PendingPhoneUpdate{})
+	if err := db.AutoMigrate(&models.User{}, &models.OTP{}, &models.PendingPhoneUpdate{}); err != nil {
+		t.Errorf("AutoMigrate failed: %v", err)
+	}
 
 	user := models.User{
 		FullName:     "PhoneUser",

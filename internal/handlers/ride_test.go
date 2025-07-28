@@ -174,7 +174,9 @@ func TestRideHandler_CreateRide(t *testing.T) {
 
 				assert.Equal(t, http.StatusBadRequest, w.Code)
 				var errResp ErrorResponse
-				json.Unmarshal(w.Body.Bytes(), &errResp)
+				if err := json.Unmarshal(w.Body.Bytes(), &errResp); err != nil {
+					t.Errorf("Failed to unmarshal error response: %v", err)
+				}
 				assert.Equal(t, tc.errMsg, errResp.Error)
 			})
 		}
@@ -513,7 +515,9 @@ func TestRideHandler_GetAllRides(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		var resp SuccessResponse
-		json.Unmarshal(w.Body.Bytes(), &resp)
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		assert.Empty(t, resp.Data.([]interface{}))
 	})
 }

@@ -286,7 +286,9 @@ func TestHandleWebSocket_NoToken(t *testing.T) {
 	assert.Equal(t, "access_token", w.Header().Get("Sec-WebSocket-Protocol"))
 
 	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Errorf("Failed to unmarshal response: %v", err)
+	}
 	assert.Equal(t, "Authentication required", response["message"])
 }
 
@@ -304,7 +306,9 @@ func TestHandleWebSocket_InvalidToken(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
 	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Errorf("Failed to unmarshal response: %v", err)
+	}
 	assert.Equal(t, "Invalid token", response["message"])
 
 	mockJWTSvc.AssertExpectations(t)
@@ -327,7 +331,9 @@ func TestGetOnlineUsers_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Errorf("Failed to unmarshal response: %v", err)
+	}
 
 	data := response["data"].(map[string]interface{})
 	assert.Equal(t, float64(2), data["count"])
@@ -349,7 +355,9 @@ func TestGetOnlineUsersFromDB_Error(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 
 	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Errorf("Failed to unmarshal response: %v", err)
+	}
 	assert.Equal(t, "Failed to retrieve online users from database", response["message"])
 
 	mockWebSocketSvc.AssertExpectations(t)
@@ -366,7 +374,9 @@ func TestGetUserConnectionHistory_InvalidUserID(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Errorf("Failed to unmarshal response: %v", err)
+	}
 	assert.Equal(t, "Invalid user ID", response["message"])
 }
 
@@ -387,7 +397,9 @@ func TestGetConnectionStats_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Errorf("Failed to unmarshal response: %v", err)
+	}
 
 	data := response["data"].(map[string]interface{})
 	assert.Equal(t, float64(100), data["total_connections"])
@@ -409,7 +421,9 @@ func TestCleanupStaleConnections_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	var response map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &response)
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Errorf("Failed to unmarshal response: %v", err)
+	}
 	assert.Equal(t, "Stale connections cleaned up successfully", response["message"])
 
 	mockWebSocketSvc.AssertExpectations(t)
