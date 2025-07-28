@@ -72,7 +72,9 @@ const (
 )
 
 func NewWebSocketSvc(db *gorm.DB) *WebSocketSvc {
-	db.AutoMigrate(&UserConnection{}, &ConnectionLog{})
+	if err := db.AutoMigrate(&UserConnection{}, &ConnectionLog{}); err != nil {
+		log.Printf("Failed to auto-migrate websocket models: %v", err)
+	}
 
 	return &WebSocketSvc{
 		db:          db,
@@ -252,10 +254,16 @@ func (c *Client) readPump(ws *WebSocketSvc) {
 	}()
 
 	c.conn.SetReadLimit(maxMessageSize)
-	c.conn.SetReadDeadline(time.Now().Add(pongWait))
+	if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+		log.Printf("Failed to set read deadline: %v", err)
+		return
+	}
 	c.conn.SetPongHandler(func(string) error {
 		c.lastPong = time.Now()
-		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+			log.Printf("Failed to set read deadline: %v", err)
+			return err
+		}
 
 		ws.db.Model(&UserConnection{}).Where("id = ?", c.connectionID).
 			Update("last_pong", c.lastPong)
@@ -293,9 +301,14 @@ func (c *Client) writePump(ws *WebSocketSvc) {
 		case <-c.ctx.Done():
 			return
 		case message, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				log.Printf("Failed to set write deadline: %v", err)
+				return
+			}
 			if !ok {
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				if err := c.conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
+					log.Printf("Failed to write close message: %v", err)
+				}
 				return
 			}
 
@@ -311,7 +324,10 @@ func (c *Client) writePump(ws *WebSocketSvc) {
 			}
 
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				log.Printf("Failed to set write deadline: %v", err)
+				return
+			}
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				log.Printf("Failed to send ping to user %d: %v", c.userID, err)
 				return

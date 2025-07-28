@@ -89,12 +89,14 @@ func TestSignUpAndSignInEndpoints(t *testing.T) {
 func TestLogoutEndpoint(t *testing.T) {
 	router, authSvc := setupRouterAndHandler(t)
 
-	authSvc.SignUp(models.SignUpReq{
+	if _, err := authSvc.SignUp(models.SignUpReq{
 		FullName:        "Logout User",
 		Email:           "logout@example.com",
 		Password:        "logout123",
 		ConfirmPassword: "logout123",
-	})
+	}); err != nil {
+		t.Errorf("Signup failed %v", err)
+	}
 
 	req, _ := http.NewRequest("POST", "/auth/logout", nil)
 	resp := httptest.NewRecorder()
@@ -105,7 +107,9 @@ func TestLogoutEndpoint(t *testing.T) {
 
 func TestProfileEndpoints(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	db.AutoMigrate(&models.User{})
+	if err := db.AutoMigrate(&models.User{}); err != nil {
+		t.Errorf("AutoMigrate failed: %v", err)
+	}
 
 	user := models.User{
 		FullName:     "John Profile",
@@ -149,7 +153,9 @@ func TestProfileEndpoints(t *testing.T) {
 
 func TestUpdatePasswordHandler(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	db.AutoMigrate(&models.User{})
+	if err := db.AutoMigrate(&models.User{}); err != nil {
+		t.Errorf("AutoMigrate failed: %v", err)
+	}
 
 	hashed, _ := utils.HashPwd("old123")
 	user := models.User{
@@ -186,7 +192,9 @@ func TestUpdatePasswordHandler(t *testing.T) {
 
 func TestRefreshTokenHandler(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	db.AutoMigrate(&models.User{})
+	if err := db.AutoMigrate(&models.User{}); err != nil {
+		t.Errorf("AutoMigrate failed: %v", err)
+	}
 
 	jwtSvc := services.NewJWTSvc("secret", db)
 	authSvc := services.NewAuthSvc(db, jwtSvc)
@@ -282,7 +290,9 @@ func TestPhoneUpdateFlow(t *testing.T) {
 
 func TestUpdatePhoneAndVerifyPhone(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	db.AutoMigrate(&models.User{})
+	if err := db.AutoMigrate(&models.User{}); err != nil {
+		t.Errorf("AutoMigrate failed: %v", err)
+	}
 
 	user := models.User{
 		FullName:     "DirectUser",
@@ -321,7 +331,9 @@ func TestUpdatePhoneAndVerifyPhone(t *testing.T) {
 
 func TestUpdateLocation(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	db.AutoMigrate(&models.User{})
+	if err := db.AutoMigrate(&models.User{}); err != nil {
+		t.Errorf("AutoMigrate failed: %v", err)
+	}
 
 	user := models.User{
 		FullName:     "LocationUser",

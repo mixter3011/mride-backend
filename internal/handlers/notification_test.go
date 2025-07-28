@@ -190,7 +190,9 @@ func TestGetNotifications(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		assert.Equal(t, "Notifications retrieved successfully", response["message"])
 		assert.NotNil(t, response["data"])
 
@@ -222,7 +224,9 @@ func TestGetNotifications(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		assert.Equal(t, "User not authenticated", response["message"])
 	})
 
@@ -237,7 +241,9 @@ func TestGetNotifications(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		assert.Equal(t, "Failed to fetch notifications", response["message"])
 
 		mockSvc.AssertExpectations(t)
@@ -267,7 +273,9 @@ func TestMarkAsRead(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		assert.Equal(t, "Notification marked as read", response["message"])
 
 		mockSvc.AssertExpectations(t)
@@ -282,7 +290,9 @@ func TestMarkAsRead(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		assert.Equal(t, "User not authenticated", response["message"])
 	})
 
@@ -295,7 +305,9 @@ func TestMarkAsRead(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		assert.Equal(t, "Invalid notification ID", response["message"])
 	})
 
@@ -310,7 +322,9 @@ func TestMarkAsRead(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		assert.Equal(t, "Failed to mark notification as read", response["message"])
 
 		mockSvc.AssertExpectations(t)
@@ -340,7 +354,9 @@ func TestMarkAllAsRead(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		assert.Equal(t, "All notifications marked as read", response["message"])
 
 		mockSvc.AssertExpectations(t)
@@ -355,7 +371,9 @@ func TestMarkAllAsRead(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		assert.Equal(t, "User not authenticated", response["message"])
 	})
 
@@ -370,7 +388,9 @@ func TestMarkAllAsRead(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		assert.Equal(t, "Failed to mark all notifications as read", response["message"])
 
 		mockSvc.AssertExpectations(t)
@@ -388,7 +408,9 @@ func TestGetUnreadCount(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		assert.Equal(t, "Unread count retrieved successfully", response["message"])
 
 		if data, ok := response["data"].(map[string]interface{}); ok {
@@ -411,7 +433,9 @@ func TestGetUnreadCount(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		if data, ok := response["data"].(map[string]interface{}); ok {
 			assert.Equal(t, float64(0), data["unread_count"])
 		} else {
@@ -430,7 +454,9 @@ func TestGetUnreadCount(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		assert.Equal(t, "User not authenticated", response["message"])
 	})
 
@@ -445,7 +471,9 @@ func TestGetUnreadCount(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 
 		var response map[string]interface{}
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Errorf("Failed to unmarshal response: %v", err)
+		}
 		assert.Equal(t, "Failed to get unread count", response["message"])
 
 		mockSvc.AssertExpectations(t)

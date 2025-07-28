@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -109,7 +110,9 @@ func (r *RideSvc) DeleteRide(userID, rideID uint) error {
 
 		if r.notificationSvc != nil {
 			for _, passengerID := range passengerIDs {
-				r.notificationSvc.CreateRideDeletedNotification(passengerID, rideID, userID)
+				if err := r.notificationSvc.CreateRideDeletedNotification(passengerID, rideID, userID); err != nil {
+					log.Printf("Failed to create ride deleted notification: %v", err)
+				}
 			}
 		}
 
@@ -254,7 +257,9 @@ func (r *RideSvc) JoinRide(userID, rideID uint) error {
 		}
 
 		if r.notificationSvc != nil {
-			r.notificationSvc.CreateRideJoinNotification(ride.UserID, rideID, userID, passengerName)
+			if err := r.notificationSvc.CreateRideJoinNotification(ride.UserID, rideID, userID, passengerName); err != nil {
+				log.Printf("Failed to create ride join notification: %v", err)
+			}
 		}
 
 		return nil
@@ -295,7 +300,9 @@ func (r *RideSvc) LeaveRide(userID, rideID uint) error {
 		}
 
 		if r.notificationSvc != nil {
-			r.notificationSvc.CreateRideLeaveNotification(ride.UserID, rideID, userID, userName)
+			if err := r.notificationSvc.CreateRideLeaveNotification(ride.UserID, rideID, userID, userName); err != nil {
+				log.Printf("Failed to create ride leave notification: %v", err)
+			}
 		}
 
 		return nil
@@ -510,7 +517,9 @@ func (r *RideSvc) StartRide(userID, rideID uint, req models.StartRideReq) error 
 
 		if r.notificationSvc != nil {
 			for _, passenger := range passengers {
-				r.notificationSvc.CreateRideStartedNotification(passenger.PassengerID, rideID, userID)
+				if err := r.notificationSvc.CreateRideStartedNotification(passenger.PassengerID, rideID, userID); err != nil {
+					log.Printf("Failed to create ride started notification: %v", err)
+				}
 			}
 		}
 
@@ -560,7 +569,9 @@ func (r *RideSvc) CompleteRide(userID, rideID uint) error {
 
 		if r.notificationSvc != nil {
 			for _, passenger := range passengers {
-				r.notificationSvc.CreateRideCompletedNotification(passenger.PassengerID, rideID, userID)
+				if err := r.notificationSvc.CreateRideCompletedNotification(passenger.PassengerID, rideID, userID); err != nil {
+					log.Printf("Failed to create ride completed notification: %v", err)
+				}
 			}
 		}
 
