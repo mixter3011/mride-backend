@@ -40,6 +40,7 @@ jobs:
           POSTGRES_PASSWORD: testpass
           POSTGRES_USER: testuser
           POSTGRES_DB: testdb
+          POSTGRES_INITDB_ARGS: "--auth-host=md5"
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -66,7 +67,21 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
-        continue-on-error: true  # Added to handle cache conflicts
+        continue-on-error: true 
+
+      - name: Setup test database
+        env:
+          PGPASSWORD: testpass
+        run: |
+          # Wait for PostgreSQL to be ready
+          until pg_isready -h localhost -p 5432 -U testuser; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+          
+          # Create root user if your app expects it
+          psql -h localhost -p 5432 -U testuser -d testdb -c "CREATE USER root WITH PASSWORD 'testpass';" || true
+          psql -h localhost -p 5432 -U testuser -d testdb -c "GRANT ALL PRIVILEGES ON DATABASE testdb TO root;" || true
 
       - name: Download dependencies
         run: go mod download
@@ -74,34 +89,29 @@ jobs:
       - name: Verify dependencies
         run: go mod verify
 
-      - name: Run gosec security scanner
-        run: |
-          go install github.com/securecodewarrior/gosec/v2/cmd/gosec@v2.21.4
-          gosec ./...
-        continue-on-error: true
-
       - name: Lint (golangci-lint)
         uses: golangci/golangci-lint-action@v4
         with:
-          version: v1.55.2  # Fixed version instead of latest
+          version: v1.55.2  
           args: --timeout=10m --out-format=colored-line-number
-        continue-on-error: true  # Added to handle cache issues
+        continue-on-error: true 
 
       - name: Run Tests with Coverage
         env:
           DATABASE_URL: postgres://testuser:testpass@localhost:5432/testdb?sslmode=disable
+          GITHUB_ACTIONS: "true"
         run: |
           go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
           go tool cover -html=coverage.out -o coverage.html
 
       - name: Upload coverage reports
-        if: github.repository_owner == 'your-username'  # Replace with your username
+        if: github.repository_owner == 'mixter3011'  
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.out
           flags: unittests
           name: codecov-umbrella
-          token: ${{ secrets.CODECOV_TOKEN }}  # Added token requirement
+          token: ${{ secrets.CODECOV_TOKEN }}  
         continue-on-error: true
 
       - name: Compile Check
@@ -111,7 +121,7 @@ jobs:
         uses: golang/govulncheck-action@v1
         with:
           go-version-input: ${{ env.GO_VERSION }}
-        continue-on-error: true  # Added to handle cache issues
+        continue-on-error: true  
 
       - name: Create test summary
         if: always()

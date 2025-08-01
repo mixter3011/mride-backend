@@ -1,0 +1,38 @@
+run:
+  timeout: 10m
+  go: "1.24"
+
+linters:
+  enable:
+    - gosec
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - gofmt
+    - goimports
+    - misspell
+    - gocritic
+    - revive
+
+linters-settings:
+  gosec:
+    tests: true
+    excludes:
+      - G104  
+  
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
