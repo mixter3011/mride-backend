@@ -1,4 +1,4 @@
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 RUN apk add --no-cache git ca-certificates tzdata
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -14,8 +14,13 @@ WORKDIR /app
 COPY --from=builder /app/cmd/server/main .
 RUN chmod +x main
 RUN chown appuser:appuser main
-COPY .env .
-COPY mride-51861-firebase-adminsdk-fbsvc-08c24a73d0.json . 
+
+ARG CI_BUILD=false
+
+RUN if [ "$CI_BUILD" = "false" ]; then echo "Production build - files will be copied"; fi
+RUN if [ "$CI_BUILD" = "false" ]; then cp .env . 2>/dev/null || echo "No .env file"; fi
+RUN if [ "$CI_BUILD" = "false" ]; then cp mride-51861-firebase-adminsdk-fbsvc-08c24a73d0.json . 2>/dev/null || echo "No Firebase JSON"; fi
+
 USER appuser
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
