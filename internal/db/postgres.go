@@ -3,12 +3,20 @@ package db
 import (
 	"log"
 	"mride-backend/internal/models"
+	"os"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 func New(dbUrl string) (*gorm.DB, error) {
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		if testUrl := os.Getenv("DATABASE_URL"); testUrl != "" {
+			dbUrl = testUrl
+			log.Println("Using CI test database")
+		}
+	}
+
 	db, err := gorm.Open(postgres.Open(dbUrl), &gorm.Config{})
 	if err != nil {
 		return nil, err
@@ -36,7 +44,6 @@ func New(dbUrl string) (*gorm.DB, error) {
 	}
 
 	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_fcm_tokens_user_device ON user_fcm_tokens(user_id, device_id)")
-
 	log.Println("Connected to database with GORM")
 	return db, nil
 }
