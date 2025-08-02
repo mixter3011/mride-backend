@@ -64,6 +64,7 @@ func TestExpiredOTP(t *testing.T) {
 		"test@example.com", "testAPIKey", "testdomain.com")
 
 	expired := models.OTP{
+		Contact:   "+19998880000",
 		Phone:     "+19998880000",
 		Code:      "123456",
 		Type:      "phone",
