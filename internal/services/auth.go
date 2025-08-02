@@ -35,6 +35,13 @@ func (a *AuthSvc) SignUp(req models.SignUpReq) (*models.AuthResp, error) {
 		return nil, fmt.Errorf("email already registered")
 	}
 
+	if err := a.db.Model(&models.User{}).Where("phone = ?", req.Phone).Count(&count).Error; err != nil {
+		return nil, err
+	}
+	if count > 0 {
+		return nil, fmt.Errorf("phone number already registered")
+	}
+
 	pwdHash, err := utils.HashPwd(req.Password)
 	if err != nil {
 		return nil, err
@@ -44,6 +51,7 @@ func (a *AuthSvc) SignUp(req models.SignUpReq) (*models.AuthResp, error) {
 		FullName:     req.FullName,
 		Email:        req.Email,
 		PasswordHash: pwdHash,
+		Phone:        &req.Phone,
 	}
 
 	if err := a.db.Create(&user).Error; err != nil {
