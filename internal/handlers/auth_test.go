@@ -54,6 +54,7 @@ func TestSignUpAndSignInEndpoints(t *testing.T) {
 		Email:           "test@example.com",
 		Password:        "password123",
 		ConfirmPassword: "password123",
+		Phone:           "9999999999",
 	}
 	jsonBody, _ := json.Marshal(signupBody)
 	req, _ := http.NewRequest("POST", "/auth/signup", bytes.NewBuffer(jsonBody))
