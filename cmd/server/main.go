@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -40,7 +41,9 @@ func main() {
 
 	jwtSvc := services.NewJWTSvc(cfg.JWTSecret, database)
 	authSvc := services.NewAuthSvc(database, jwtSvc)
+	fmt.Println("Creating services...")
 	otpSvc := services.NewOTPSvc(database, cfg.TwilioSID, cfg.TwilioToken, cfg.TwilioPhone, cfg.EmailSender, cfg.EmailAPIKey, cfg.EmailDomain)
+	fmt.Println("OTP service created")
 
 	webSocketSvc := services.NewWebSocketSvc(database)
 
@@ -48,7 +51,9 @@ func main() {
 	rideSvc := services.NewRideSvc(database, notificationSvc)
 
 	authHandler := handlers.NewAuthHandler(authSvc, otpSvc)
+	fmt.Println("Creating handlers...")
 	otpHandler := handlers.NewOTPHandler(otpSvc, authSvc)
+	fmt.Println("OTP handler created")
 	rideHandler := handlers.NewRideHandler(rideSvc)
 	notificationHandler := handlers.NewNotificationHandler(notificationSvc)
 	webSocketHandler := handlers.NewWebSocketHandler(webSocketSvc, jwtSvc)
@@ -87,7 +92,9 @@ func main() {
 	r.POST("/auth/signup", authHandler.SignUp)
 	r.POST("/auth/signin", authHandler.SignIn)
 	r.POST("/auth/refresh", authHandler.RefreshToken)
+	fmt.Println("Registering routes...")
 	r.POST("/auth/send-email-otp", otpHandler.SendEmailOTP)
+	fmt.Println("send-email-otp route registered")
 
 	protected := r.Group("/", middleware.AuthMiddleware(jwtSvc))
 	{
