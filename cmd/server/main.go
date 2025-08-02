@@ -40,7 +40,7 @@ func main() {
 
 	jwtSvc := services.NewJWTSvc(cfg.JWTSecret, database)
 	authSvc := services.NewAuthSvc(database, jwtSvc)
-	otpSvc := services.NewOTPSvc(database, cfg.TwilioSID, cfg.TwilioToken, cfg.TwilioPhone)
+	otpSvc := services.NewOTPSvc(database, cfg.TwilioSID, cfg.TwilioToken, cfg.TwilioPhone, cfg.EmailSender, cfg.EmailAPIKey, cfg.EmailDomain)
 
 	webSocketSvc := services.NewWebSocketSvc(database)
 
@@ -93,6 +93,8 @@ func main() {
 		protected.POST("/auth/logout", authHandler.Logout)
 
 		protected.GET("/auth/profile", authHandler.GetProfile)
+		protected.POST("/auth/send-email-otp", otpHandler.SendEmailOTP)
+		protected.POST("/auth/verify-email-otp", otpHandler.VerifyEmailOTP)
 		protected.POST("/auth/send-otp", otpHandler.SendOTP)
 		protected.POST("/auth/verify-otp", otpHandler.VerifyOTP)
 

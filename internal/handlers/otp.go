@@ -56,7 +56,7 @@ func (h *OTPHandler) SendOTP(c *gin.Context) {
 	}
 
 	code := h.otpSvc.GenCode()
-	if err := h.otpSvc.SaveOTP(req.Phone, code); err != nil {
+	if err := h.otpSvc.SaveOTP(req.Phone, code, "phone"); err != nil {
 		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to generate OTP")
 		return
 	}
@@ -67,6 +67,44 @@ func (h *OTPHandler) SendOTP(c *gin.Context) {
 	}
 
 	utils.SuccJSON(c, "OTP sent successfully", nil)
+}
+
+func (h *OTPHandler) SendEmailOTP(c *gin.Context) {
+	var req models.EmailVerifyReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	user, err := h.authSvc.GetUserByID(userID.(int))
+	if err != nil {
+		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to get user")
+		return
+	}
+
+	if user.Email != req.Email {
+		utils.ErrJSON(c, http.StatusBadRequest, "Email does not match registered email")
+		return
+	}
+
+	code := h.otpSvc.GenCode()
+	if err := h.otpSvc.SaveOTP(req.Email, code, "email"); err != nil {
+		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to generate OTP")
+		return
+	}
+
+	if err := h.otpSvc.SendEmailOTP(req.Email, code); err != nil {
+		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to send email OTP")
+		return
+	}
+
+	utils.SuccJSON(c, "Email OTP sent successfully", nil)
 }
 
 func (h *OTPHandler) VerifyOTP(c *gin.Context) {
@@ -82,7 +120,7 @@ func (h *OTPHandler) VerifyOTP(c *gin.Context) {
 		return
 	}
 
-	if err := h.otpSvc.VerifyOTP(req.Phone, req.Code); err != nil {
+	if err := h.otpSvc.VerifyOTP(req.Phone, req.Code, "phone"); err != nil {
 		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -93,4 +131,30 @@ func (h *OTPHandler) VerifyOTP(c *gin.Context) {
 	}
 
 	utils.SuccJSON(c, "Phone verified successfully", nil)
+}
+
+func (h *OTPHandler) VerifyEmailOTP(c *gin.Context) {
+	var req models.EmailOTPVerifyReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	if err := h.otpSvc.VerifyOTP(req.Email, req.Code, "email"); err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := h.authSvc.VerifyEmail(userID.(int)); err != nil {
+		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to verify email")
+		return
+	}
+
+	utils.SuccJSON(c, "Email verified successfully", nil)
 }

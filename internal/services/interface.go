@@ -4,9 +4,10 @@ import "mride-backend/internal/models"
 
 type OTPService interface {
 	GenCode() string
-	SaveOTP(phone, code string) error
+	SaveOTP(contact, code, otpType string) error
+	VerifyOTP(contact, code, otpType string) error
 	SendOTP(phone, code string) error
-	VerifyOTP(phone, code string) error
+	SendEmailOTP(email, code string) error
 }
 
 type NotificationSvcInterface interface {
