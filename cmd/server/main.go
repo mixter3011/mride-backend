@@ -87,13 +87,13 @@ func main() {
 	r.POST("/auth/signup", authHandler.SignUp)
 	r.POST("/auth/signin", authHandler.SignIn)
 	r.POST("/auth/refresh", authHandler.RefreshToken)
+	r.POST("/auth/send-email-otp", otpHandler.SendEmailOTP)
 
 	protected := r.Group("/", middleware.AuthMiddleware(jwtSvc))
 	{
 		protected.POST("/auth/logout", authHandler.Logout)
 
 		protected.GET("/auth/profile", authHandler.GetProfile)
-		protected.POST("/auth/send-email-otp", otpHandler.SendEmailOTP)
 		protected.POST("/auth/verify-email-otp", otpHandler.VerifyEmailOTP)
 		protected.POST("/auth/send-otp", otpHandler.SendOTP)
 		protected.POST("/auth/verify-otp", otpHandler.VerifyOTP)

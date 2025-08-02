@@ -77,20 +77,17 @@ func (h *OTPHandler) SendEmailOTP(c *gin.Context) {
 	}
 
 	userID, exists := c.Get("user_id")
-	if !exists {
-		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
-		return
-	}
+	if exists {
+		user, err := h.authSvc.GetUserByID(userID.(int))
+		if err != nil {
+			utils.ErrJSON(c, http.StatusInternalServerError, "Failed to get user")
+			return
+		}
 
-	user, err := h.authSvc.GetUserByID(userID.(int))
-	if err != nil {
-		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to get user")
-		return
-	}
-
-	if user.Email != req.Email {
-		utils.ErrJSON(c, http.StatusBadRequest, "Email does not match registered email")
-		return
+		if user.Email != req.Email {
+			utils.ErrJSON(c, http.StatusBadRequest, "Email does not match registered email")
+			return
+		}
 	}
 
 	code := h.otpSvc.GenCode()
