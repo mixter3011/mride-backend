@@ -265,6 +265,7 @@ func TestPhoneUpdateFlow(t *testing.T) {
 	authHandler := handlers.NewAuthHandler(authSvc, otpSvc)
 
 	r := gin.Default()
+
 	r.POST("/auth/request-phone-update", func(c *gin.Context) {
 		c.Set("user_id", int(user.ID))
 		authHandler.RequestPhoneUpdate(c)
@@ -274,12 +275,15 @@ func TestPhoneUpdateFlow(t *testing.T) {
 		authHandler.ConfirmPhoneUpdate(c)
 	})
 
-	reqBody := models.UpdatePhoneReq{Phone: "9999999999"}
+	reqBody := models.UpdatePhoneReq{Phone: "1111111111"}
 	jsonReq, _ := json.Marshal(reqBody)
 	req, _ := http.NewRequest("POST", "/auth/request-phone-update", bytes.NewBuffer(jsonReq))
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 	r.ServeHTTP(resp, req)
+	if resp.Code != 200 {
+		t.Logf("Request phone update failed with status %d, body: %s", resp.Code, resp.Body.String())
+	}
 	assert.Equal(t, 200, resp.Code)
 
 	confirmReq := models.ConfirmPhoneUpdateReq{OTP: "123456"}
