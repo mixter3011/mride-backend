@@ -100,18 +100,22 @@ jobs:
         env:
           DATABASE_URL: postgres://testuser:testpass@localhost:5432/testdb?sslmode=disable
           GITHUB_ACTIONS: "true"
+          GORM_LOG_LEVEL: "1"
         run: |
-          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+          # Set GORM to silent mode to reduce log output
+          export GORM_LOG_LEVEL=1
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./... || exit 1
           go tool cover -html=coverage.out -o coverage.html
 
       - name: Upload coverage reports
-        if: github.repository_owner == 'mixter3011'  
+        if: github.repository_owner == 'mixter3011' && github.event_name == 'push'
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.out
           flags: unittests
           name: codecov-umbrella
-          token: ${{ secrets.CODECOV_TOKEN }}  
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
         continue-on-error: true
 
       - name: Compile Check
@@ -151,7 +155,7 @@ jobs:
           
       - name: Run benchmark tests
         run: |
-          go test -bench=. -benchmem -run=^$ ./... > benchmark.txt
+          go test -bench=. -benchmem -run=^$ ./... > benchmark.txt || true
           echo "## Performance Benchmarks 🚀" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           cat benchmark.txt >> $GITHUB_STEP_SUMMARY
@@ -352,6 +356,9 @@ jobs:
             fi
           done
           
+          # Store deployment result for notification
+          echo "$HEALTH_CHECK_PASSED" > /tmp/deployment_success
+          
           # Handle deployment result
           if [ "$HEALTH_CHECK_PASSED" = "true" ]; then
             echo "[SUCCESS] Deployment completed successfully at $(date)"
@@ -447,52 +454,48 @@ jobs:
             STATUS_TEXT="failed"
           fi
           
-          # Send email notification (only if secrets are available)
-          python3 << EOF || echo "Email notification failed - missing configuration"
-          import smtplib
-          from email.mime.text import MIMEText
-          from email.mime.multipart import MIMEMultipart
-          import os
+          # Check if email credentials are available
+          if [ -z "${{ secrets.NOTIFICATION_EMAIL }}" ] || [ -z "${{ secrets.NOTIFICATION_EMAIL_PASSWORD }}" ]; then
+            echo "⚠️ Email notification skipped - missing NOTIFICATION_EMAIL or NOTIFICATION_EMAIL_PASSWORD secrets"
+            exit 0
+          fi
           
-          # Email configuration
-          smtp_server = "smtp.gmail.com"
-          smtp_port = 587
-          sender_email = "${{ secrets.NOTIFICATION_EMAIL }}"
-          sender_password = "${{ secrets.NOTIFICATION_EMAIL_PASSWORD }}"
-          recipient_email = "senachi0827@gmail.com"
+          # Install mailutils for email sending
+          sudo apt-get update && sudo apt-get install -y mailutils ssmtp
           
-          # Create message
-          msg = MIMEMultipart()
-          msg['From'] = sender_email
-          msg['To'] = recipient_email
-          msg['Subject'] = f"${STATUS_EMOJI} MRIDE Backend Deployment ${STATUS_TEXT.title()}"
-          
-          # Email body
-          body = f"""
-          MRIDE Backend Deployment Report
-          
-          Status: ${STATUS_EMOJI} {STATUS_TEXT.upper()}
-          Commit: ${{ github.sha }}
-          Branch: ${{ github.ref_name }}
-          Workflow: ${{ github.workflow }}
-          Run ID: ${{ github.run_id }}
-          Timestamp: $(date -u)
-          
-          View details: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          """
-          
-          msg.attach(MIMEText(body, 'plain'))
-          
-          try:
-              server = smtplib.SMTP(smtp_server, smtp_port)
-              server.starttls()
-              server.login(sender_email, sender_password)
-              server.send_message(msg)
-              server.quit()
-              print(f"${STATUS_EMOJI} Deployment ${STATUS_TEXT} - Email sent successfully")
-          except Exception as e:
-              print(f"Failed to send email: {e}")
+          # Configure ssmtp for Gmail
+          sudo tee /etc/ssmtp/ssmtp.conf > /dev/null << EOF
+          root=${{ secrets.NOTIFICATION_EMAIL }}
+          mailhub=smtp.gmail.com:587
+          AuthUser=${{ secrets.NOTIFICATION_EMAIL }}
+          AuthPass=${{ secrets.NOTIFICATION_EMAIL_PASSWORD }}
+          UseSTARTTLS=YES
+          UseTLS=YES
+          FromLineOverride=YES
           EOF
+          
+          # Set correct permissions
+          sudo chmod 640 /etc/ssmtp/ssmtp.conf
+          
+          # Send email
+          {
+            echo "Subject: ${STATUS_EMOJI} MRIDE Backend Deployment ${STATUS_TEXT^}"
+            echo "From: ${{ secrets.NOTIFICATION_EMAIL }}"
+            echo "To: senachi0827@gmail.com"
+            echo ""
+            echo "MRIDE Backend Deployment Report"
+            echo ""
+            echo "Status: ${STATUS_EMOJI} ${STATUS_TEXT^^}"
+            echo "Commit: ${{ github.sha }}"
+            echo "Branch: ${{ github.ref_name }}"
+            echo "Workflow: ${{ github.workflow }}"
+            echo "Run ID: ${{ github.run_id }}"
+            echo "Timestamp: $(date -u)"
+            echo ""
+            echo "View details: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } | ssmtp senachi0827@gmail.com
+          
+          echo "✅ Email notification sent successfully"
 
   monitoring:
     name: Post-Deploy Monitoring

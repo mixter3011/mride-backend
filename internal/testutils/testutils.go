@@ -3,16 +3,26 @@ package testutils
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-func SetupTestDB(t *testing.T, modelsToMigrate ...interface{}) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	assert.NoError(t, err)
-	err = db.AutoMigrate(modelsToMigrate...)
-	assert.NoError(t, err)
+func SetupTestDB(t *testing.T, models ...interface{}) *gorm.DB {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("Failed to connect to test database: %v", err)
+	}
+
+	if len(models) > 0 {
+		err = db.AutoMigrate(models...)
+		if err != nil {
+			t.Fatalf("Failed to migrate test database: %v", err)
+		}
+	}
+
 	return db
 }
 
