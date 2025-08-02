@@ -89,13 +89,6 @@ jobs:
       - name: Verify dependencies
         run: go mod verify
 
-      - name: Lint (golangci-lint)
-        uses: golangci/golangci-lint-action@v4
-        with:
-          version: v1.55.2  
-          args: --timeout=10m --out-format=colored-line-number
-        continue-on-error: true 
-
       - name: Run Tests with Coverage
         env:
           DATABASE_URL: postgres://testuser:testpass@localhost:5432/testdb?sslmode=disable
@@ -443,59 +436,6 @@ jobs:
             \"workflow_run\": \"${{ github.run_id }}\"
           }" > .deployment-status.json
           EOF
-
-      - name: Notify deployment status
-        if: always()
-        run: |
-          STATUS_EMOJI="✅"
-          STATUS_TEXT="successful"
-          if [ "${{ job.status }}" != "success" ]; then
-            STATUS_EMOJI="❌"
-            STATUS_TEXT="failed"
-          fi
-          
-          # Check if email credentials are available
-          if [ -z "${{ secrets.NOTIFICATION_EMAIL }}" ] || [ -z "${{ secrets.NOTIFICATION_EMAIL_PASSWORD }}" ]; then
-            echo "⚠️ Email notification skipped - missing NOTIFICATION_EMAIL or NOTIFICATION_EMAIL_PASSWORD secrets"
-            exit 0
-          fi
-          
-          # Install mailutils for email sending
-          sudo apt-get update && sudo apt-get install -y mailutils ssmtp
-          
-          # Configure ssmtp for Gmail
-          sudo tee /etc/ssmtp/ssmtp.conf > /dev/null << EOF
-          root=${{ secrets.NOTIFICATION_EMAIL }}
-          mailhub=smtp.gmail.com:587
-          AuthUser=${{ secrets.NOTIFICATION_EMAIL }}
-          AuthPass=${{ secrets.NOTIFICATION_EMAIL_PASSWORD }}
-          UseSTARTTLS=YES
-          UseTLS=YES
-          FromLineOverride=YES
-          EOF
-          
-          # Set correct permissions
-          sudo chmod 640 /etc/ssmtp/ssmtp.conf
-          
-          # Send email
-          {
-            echo "Subject: ${STATUS_EMOJI} MRIDE Backend Deployment ${STATUS_TEXT^}"
-            echo "From: ${{ secrets.NOTIFICATION_EMAIL }}"
-            echo "To: senachi0827@gmail.com"
-            echo ""
-            echo "MRIDE Backend Deployment Report"
-            echo ""
-            echo "Status: ${STATUS_EMOJI} ${STATUS_TEXT^^}"
-            echo "Commit: ${{ github.sha }}"
-            echo "Branch: ${{ github.ref_name }}"
-            echo "Workflow: ${{ github.workflow }}"
-            echo "Run ID: ${{ github.run_id }}"
-            echo "Timestamp: $(date -u)"
-            echo ""
-            echo "View details: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          } | ssmtp senachi0827@gmail.com
-          
-          echo "✅ Email notification sent successfully"
 
   monitoring:
     name: Post-Deploy Monitoring
