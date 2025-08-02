@@ -43,11 +43,17 @@ func (o *OTPSvc) GenCode() string {
 
 func (o *OTPSvc) SaveOTP(contact, code, otpType string) error {
 	otp := models.OTP{
-		Phone:     contact,
+		Contact:   contact,
 		Code:      code,
 		ExpiresAt: time.Now().Add(5 * time.Minute),
 		Used:      false,
 		Type:      otpType,
+	}
+
+	if otpType == "email" {
+		otp.Email = contact
+	} else {
+		otp.Phone = contact
 	}
 
 	result := o.db.Create(&otp)
@@ -57,9 +63,9 @@ func (o *OTPSvc) SaveOTP(contact, code, otpType string) error {
 func (o *OTPSvc) VerifyOTP(contact, code, otpType string) error {
 	var otp models.OTP
 
-	result := o.db.Where("phone = ? AND code = ? AND used = ? AND type = ?", contact, code, false, otpType).
-		Order("created_at DESC").
-		First(&otp)
+	query := o.db.Where("contact = ? AND code = ? AND used = ? AND type = ?", contact, code, false, otpType)
+
+	result := query.Order("created_at DESC").First(&otp)
 
 	if result.Error != nil {
 		if result.Error == gorm.ErrRecordNotFound {

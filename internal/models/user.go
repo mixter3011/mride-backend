@@ -69,11 +69,13 @@ type AuthResp struct {
 }
 type OTP struct {
 	ID        uint      `json:"id" gorm:"primaryKey"`
-	Phone     string    `json:"phone" gorm:"not null"`
-	Code      string    `json:"code" gorm:"not null"`
-	Type      string    `json:"type" gorm:"not null;default:'phone'"`
-	ExpiresAt time.Time `json:"expires_at" gorm:"not null"`
-	Used      bool      `json:"used" gorm:"default:false"`
+	Phone     string    `json:"phone"`
+	Email     string    `json:"email"`
+	Contact   string    `json:"contact"`
+	Code      string    `json:"code"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Used      bool      `json:"used"`
+	Type      string    `json:"type"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
