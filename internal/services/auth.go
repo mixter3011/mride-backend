@@ -47,11 +47,12 @@ func (a *AuthSvc) SignUp(req models.SignUpReq) (*models.AuthResp, error) {
 		return nil, err
 	}
 
+	phone := req.Phone
 	user := models.User{
 		FullName:     req.FullName,
 		Email:        req.Email,
 		PasswordHash: pwdHash,
-		Phone:        &req.Phone,
+		Phone:        &phone,
 	}
 
 	if err := a.db.Create(&user).Error; err != nil {
