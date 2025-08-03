@@ -69,12 +69,17 @@ func (a *AuthSvc) SignUp(req models.SignUpReq) (*models.AuthResp, error) {
 		return nil, err
 	}
 
-	user.RefreshToken = refreshToken
-	user.RefreshTokenExpiry = time.Now().Add(7 * 24 * time.Hour)
+	updateData := models.User{
+		RefreshToken:       refreshToken,
+		RefreshTokenExpiry: time.Now().Add(7 * 24 * time.Hour),
+	}
 
-	if err := a.db.Save(&user).Error; err != nil {
+	if err := a.db.Model(&user).Updates(updateData).Error; err != nil {
 		return nil, err
 	}
+
+	user.RefreshToken = refreshToken
+	user.RefreshTokenExpiry = updateData.RefreshTokenExpiry
 
 	return &models.AuthResp{
 		Token:        accessToken,
