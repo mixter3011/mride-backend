@@ -81,6 +81,10 @@ func (a *AuthSvc) SignUp(req models.SignUpReq) (*models.AuthResp, error) {
 	user.RefreshToken = refreshToken
 	user.RefreshTokenExpiry = updateData.RefreshTokenExpiry
 
+	if err := a.db.Where("id = ?", user.ID).First(&user).Error; err != nil {
+		return nil, err
+	}
+
 	return &models.AuthResp{
 		Token:        accessToken,
 		RefreshToken: refreshToken,
