@@ -230,11 +230,6 @@ func (a *AuthSvc) VerifyPhone(userID int) error {
 	return a.db.Model(&models.User{}).Where("id = ?", userID).Update("phone_verified", true).Error
 }
 
-func (a *AuthSvc) VerifyEmail(userID int) error {
-	result := a.db.Model(&models.User{}).Where("id = ?", userID).Update("email_verified", true)
-	return result.Error
-}
-
 func (a *AuthSvc) ValidateRefreshToken(token string) (*Claims, error) {
 	return a.jwtSvc.ValidToken(token)
 }

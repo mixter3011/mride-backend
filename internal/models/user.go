@@ -8,7 +8,6 @@ type User struct {
 	ID                 uint      `gorm:"primaryKey" json:"id"`
 	FullName           string    `gorm:"not null" json:"full_name"`
 	Email              string    `gorm:"uniqueIndex;not null" json:"email"`
-	EmailVerified      bool      `json:"email_verified" gorm:"default:false"`
 	PasswordHash       string    `gorm:"not null" json:"-"`
 	Phone              *string   `gorm:"uniqueIndex" json:"phone"`
 	PhoneVerified      bool      `gorm:"default:false" json:"phone_verified"`
@@ -69,23 +68,11 @@ type AuthResp struct {
 	User         User   `json:"user"`
 }
 type OTP struct {
-	ID        uint      `json:"id" gorm:"primaryKey"`
-	Phone     string    `json:"phone"`
-	Email     string    `json:"email"`
-	Contact   string    `json:"contact"`
-	Code      string    `json:"code"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Used      bool      `json:"used"`
-	Type      string    `json:"type"`
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Phone     string    `gorm:"not null" json:"phone"`
+	Code      string    `gorm:"not null" json:"code"`
+	ExpiresAt time.Time `gorm:"not null" json:"expires_at"`
+	Used      bool      `gorm:"default:false" json:"used"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
-}
-
-type EmailVerifyReq struct {
-	Email string `json:"email" binding:"required,email"`
-}
-
-type EmailOTPVerifyReq struct {
-	Email string `json:"email" binding:"required,email"`
-	Code  string `json:"code" binding:"required,len=6"`
 }

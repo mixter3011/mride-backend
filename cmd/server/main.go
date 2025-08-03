@@ -42,7 +42,7 @@ func main() {
 	jwtSvc := services.NewJWTSvc(cfg.JWTSecret, database)
 	authSvc := services.NewAuthSvc(database, jwtSvc)
 	fmt.Println("Creating services...")
-	otpSvc := services.NewOTPSvc(database, cfg.TwilioSID, cfg.TwilioToken, cfg.TwilioPhone, cfg.EmailSender, cfg.EmailAPIKey, cfg.EmailDomain)
+	otpSvc := services.NewOTPSvc(database, cfg.TwilioSID, cfg.TwilioToken, cfg.TwilioPhone)
 	fmt.Println("OTP service created")
 
 	webSocketSvc := services.NewWebSocketSvc(database)
@@ -97,8 +97,6 @@ func main() {
 	{
 		protected.POST("/auth/logout", authHandler.Logout)
 
-		protected.POST("/auth/send-email-otp", otpHandler.SendEmailOTP)
-		protected.POST("/auth/verify-email-otp", otpHandler.VerifyEmailOTP)
 		protected.POST("/auth/send-otp", otpHandler.SendOTP)
 		protected.POST("/auth/verify-otp", otpHandler.VerifyOTP)
 		protected.GET("/auth/profile", authHandler.GetProfile)

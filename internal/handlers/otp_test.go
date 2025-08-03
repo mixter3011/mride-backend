@@ -28,8 +28,8 @@ func (m *MockOTPService) GenCode() string {
 	return args.String(0)
 }
 
-func (m *MockOTPService) SaveOTP(contact, code, otpType string) error {
-	args := m.Called(contact, code, otpType)
+func (m *MockOTPService) SaveOTP(phone, code string) error {
+	args := m.Called(phone, code)
 	return args.Error(0)
 }
 
@@ -43,13 +43,12 @@ func (m *MockOTPService) SendEmailOTP(email, code string) error {
 	return args.Error(0)
 }
 
-func (m *MockOTPService) VerifyOTP(contact, code, otpType string) error {
-	args := m.Called(contact, code, otpType)
+func (m *MockOTPService) VerifyOTP(phone, code string) error {
+	args := m.Called(phone, code)
 	return args.Error(0)
 }
 
 func setupAuthSvcForOTP(t *testing.T) *services.AuthSvc {
-	// Use silent logger to reduce test output
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
@@ -78,7 +77,7 @@ func TestSendOTPHandler(t *testing.T) {
 	assert.NoError(t, err)
 
 	mockOTP.On("GenCode").Return("123456")
-	mockOTP.On("SaveOTP", "+1234567890", "123456", "phone").Return(nil)
+	mockOTP.On("SaveOTP", "+1234567890", "123456").Return(nil)
 	mockOTP.On("SendOTP", "+1234567890", "123456").Return(nil)
 
 	handler := handlers.NewOTPHandler(mockOTP, authSvc)
@@ -93,73 +92,6 @@ func TestSendOTPHandler(t *testing.T) {
 	body, _ := json.Marshal(payload)
 
 	req, _ := http.NewRequest(http.MethodPost, "/send-otp", bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp := httptest.NewRecorder()
-	router.ServeHTTP(resp, req)
-
-	assert.Equal(t, http.StatusOK, resp.Code)
-	mockOTP.AssertExpectations(t)
-}
-
-func TestSendEmailOTPHandler(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	mockOTP := new(MockOTPService)
-	authSvc := setupAuthSvcForOTP(t)
-
-	user := models.User{
-		FullName: "Email User",
-		Email:    "email@example.com",
-	}
-	db := authSvc.GetDB()
-	err := db.Create(&user).Error
-	assert.NoError(t, err)
-
-	mockOTP.On("GenCode").Return("123456")
-	mockOTP.On("SaveOTP", "email@example.com", "123456", "email").Return(nil)
-	mockOTP.On("SendEmailOTP", "email@example.com", "123456").Return(nil)
-
-	handler := handlers.NewOTPHandler(mockOTP, authSvc)
-
-	router := gin.Default()
-	router.POST("/send-email-otp", func(c *gin.Context) {
-		c.Set("user_id", int(user.ID))
-		handler.SendEmailOTP(c)
-	})
-
-	payload := map[string]string{"email": "email@example.com"}
-	body, _ := json.Marshal(payload)
-
-	req, _ := http.NewRequest(http.MethodPost, "/send-email-otp", bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp := httptest.NewRecorder()
-	router.ServeHTTP(resp, req)
-
-	assert.Equal(t, http.StatusOK, resp.Code)
-	mockOTP.AssertExpectations(t)
-}
-
-func TestSendEmailOTPHandlerUnauthenticated(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	mockOTP := new(MockOTPService)
-	authSvc := setupAuthSvcForOTP(t)
-
-	mockOTP.On("GenCode").Return("123456")
-	mockOTP.On("SaveOTP", "anonymous@example.com", "123456", "email").Return(nil)
-	mockOTP.On("SendEmailOTP", "anonymous@example.com", "123456").Return(nil)
-
-	handler := handlers.NewOTPHandler(mockOTP, authSvc)
-
-	router := gin.Default()
-	router.POST("/send-email-otp", handler.SendEmailOTP)
-
-	payload := map[string]string{"email": "anonymous@example.com"}
-	body, _ := json.Marshal(payload)
-
-	req, _ := http.NewRequest(http.MethodPost, "/send-email-otp", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp := httptest.NewRecorder()
@@ -185,7 +117,7 @@ func TestVerifyOTPHandler(t *testing.T) {
 	err := db.Create(&user).Error
 	assert.NoError(t, err)
 
-	mockOTP.On("VerifyOTP", "+1234567890", "123456", "phone").Return(nil)
+	mockOTP.On("VerifyOTP", "+1234567890", "123456").Return(nil)
 
 	handler := handlers.NewOTPHandler(mockOTP, authSvc)
 
@@ -202,46 +134,6 @@ func TestVerifyOTPHandler(t *testing.T) {
 	body, _ := json.Marshal(payload)
 
 	req, _ := http.NewRequest(http.MethodPost, "/verify-otp", bytes.NewBuffer(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp := httptest.NewRecorder()
-	router.ServeHTTP(resp, req)
-
-	assert.Equal(t, http.StatusOK, resp.Code)
-	mockOTP.AssertExpectations(t)
-}
-
-func TestVerifyEmailOTPHandler(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	mockOTP := new(MockOTPService)
-	authSvc := setupAuthSvcForOTP(t)
-
-	user := models.User{
-		FullName: "Verify Email User",
-		Email:    "verify@example.com",
-	}
-	db := authSvc.GetDB()
-	err := db.Create(&user).Error
-	assert.NoError(t, err)
-
-	mockOTP.On("VerifyOTP", "verify@example.com", "123456", "email").Return(nil)
-
-	handler := handlers.NewOTPHandler(mockOTP, authSvc)
-
-	router := gin.Default()
-	router.POST("/verify-email-otp", func(c *gin.Context) {
-		c.Set("user_id", int(user.ID))
-		handler.VerifyEmailOTP(c)
-	})
-
-	payload := map[string]string{
-		"email": "verify@example.com",
-		"code":  "123456",
-	}
-	body, _ := json.Marshal(payload)
-
-	req, _ := http.NewRequest(http.MethodPost, "/verify-email-otp", bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp := httptest.NewRecorder()

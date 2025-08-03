@@ -377,7 +377,7 @@ func (m *MockOTPSvc) GenCode() string {
 	return "123456"
 }
 
-func (m *MockOTPSvc) SaveOTP(contact, code, otpType string) error {
+func (m *MockOTPSvc) SaveOTP(contact, code string) error {
 	return nil
 }
 
@@ -385,11 +385,7 @@ func (m *MockOTPSvc) SendOTP(phone, code string) error {
 	return nil
 }
 
-func (m *MockOTPSvc) SendEmailOTP(email, code string) error {
-	return nil
-}
-
-func (m *MockOTPSvc) VerifyOTP(contact, code, otpType string) error {
+func (m *MockOTPSvc) VerifyOTP(contact, code string) error {
 	if code != "123456" {
 		return fmt.Errorf("invalid code")
 	}

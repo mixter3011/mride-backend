@@ -174,7 +174,7 @@ func (h *AuthHandler) RequestPhoneUpdate(c *gin.Context) {
 	}
 
 	code := h.otpSvc.GenCode()
-	if err := h.otpSvc.SaveOTP(req.Phone, code, "phone"); err != nil {
+	if err := h.otpSvc.SaveOTP(req.Phone, code); err != nil {
 		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to generate OTP")
 		return
 	}
@@ -213,7 +213,7 @@ func (h *AuthHandler) ConfirmPhoneUpdate(c *gin.Context) {
 		return
 	}
 
-	err = h.otpSvc.VerifyOTP(pendingPhone, req.OTP, "phone")
+	err = h.otpSvc.VerifyOTP(pendingPhone, req.OTP)
 	if err != nil {
 		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
 		return
