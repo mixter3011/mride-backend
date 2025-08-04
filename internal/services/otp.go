@@ -160,8 +160,16 @@ func (o *OTPSvc) SendOTP(phone, code string) error {
 }
 
 func (o *OTPSvc) SendEmailOTP(email, code string) error {
+	fmt.Printf("=== EMAIL OTP DEBUG START ===\n")
 	fmt.Printf("Sending Email OTP %s to email %s\n", code, email)
 
+	if o.resendAPIKey == "" {
+		fmt.Printf("ERROR: RESEND_API_KEY is empty!\n")
+		return fmt.Errorf("RESEND_API_KEY is not set")
+	}
+	fmt.Printf("API Key loaded: %s... (length: %d)\n", o.resendAPIKey[:min(10, len(o.resendAPIKey))], len(o.resendAPIKey))
+
+	fmt.Printf("Creating Resend client...\n")
 	client := resend.NewClient(o.resendAPIKey)
 
 	params := &resend.SendEmailRequest{
@@ -171,12 +179,25 @@ func (o *OTPSvc) SendEmailOTP(email, code string) error {
 		Text:    fmt.Sprintf("%s is your OTP to verify authentication for MRIDE. This OTP will expire in 5 minutes.", code),
 	}
 
-	_, err := client.Emails.Send(params)
+	fmt.Printf("Attempting to send email with params: From=%s, To=%s, Subject=%s\n", params.From, params.To[0], params.Subject)
+
+	sent, err := client.Emails.Send(params)
 	if err != nil {
+		fmt.Printf("RESEND API ERROR: %v\n", err)
+		fmt.Printf("Error type: %T\n", err)
 		return fmt.Errorf("failed to send email via Resend: %v", err)
 	}
 
+	fmt.Printf("SUCCESS: Email sent! ID: %s\n", sent.Id)
+	fmt.Printf("=== EMAIL OTP DEBUG END ===\n")
 	return nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 var _ OTPService = (*OTPSvc)(nil)
