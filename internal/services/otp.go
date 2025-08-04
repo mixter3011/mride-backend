@@ -165,7 +165,7 @@ func (o *OTPSvc) SendEmailOTP(email, code string) error {
 	client := resend.NewClient(o.resendAPIKey)
 
 	params := &resend.SendEmailRequest{
-		From:    "MRIDE <auth@yourdomain.com>",
+		From:    "MRIDE <auth@mride.senachi.me>",
 		To:      []string{email},
 		Subject: "OTP for MRIDE",
 		Text:    fmt.Sprintf("%s is your OTP to verify authentication for MRIDE. This OTP will expire in 5 minutes.", code),
