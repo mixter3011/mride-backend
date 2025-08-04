@@ -16,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -371,18 +372,35 @@ func TestUpdateLocation(t *testing.T) {
 	assert.Equal(t, 200, resp.Code)
 }
 
-type MockOTPSvc struct{}
+type MockOTPSvc struct {
+	mock.Mock
+}
 
 func (m *MockOTPSvc) GenCode() string {
 	return "123456"
+}
+
+func (m *MockOTPSvc) GenCryptoCode() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
 }
 
 func (m *MockOTPSvc) SaveOTP(contact, code string) error {
 	return nil
 }
 
+func (m *MockOTPSvc) SaveEmailOTP(email, code string) error {
+	args := m.Called(email, code)
+	return args.Error(0)
+}
+
 func (m *MockOTPSvc) SendOTP(phone, code string) error {
 	return nil
+}
+
+func (m *MockOTPSvc) SendEmailOTP(email, code string) error {
+	args := m.Called(email, code)
+	return args.Error(0)
 }
 
 func (m *MockOTPSvc) VerifyOTP(contact, code string) error {
@@ -390,4 +408,9 @@ func (m *MockOTPSvc) VerifyOTP(contact, code string) error {
 		return fmt.Errorf("invalid code")
 	}
 	return nil
+}
+
+func (m *MockOTPSvc) VerifyEmailOTP(email, code string) error {
+	args := m.Called(email, code)
+	return args.Error(0)
 }

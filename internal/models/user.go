@@ -69,10 +69,18 @@ type AuthResp struct {
 }
 type OTP struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
-	Phone     string    `gorm:"not null" json:"phone"`
-	Code      string    `gorm:"not null" json:"code"`
-	ExpiresAt time.Time `gorm:"not null" json:"expires_at"`
-	Used      bool      `gorm:"default:false" json:"used"`
+	Phone     string    `json:"phone,omitempty"`
+	Email     string    `json:"email,omitempty"`
+	Code      string    `json:"-"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Used      bool      `json:"used"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+type EmailVerifyReq struct {
+	Email string `json:"email" binding:"required"`
+}
+type EmailOTPVerifyReq struct {
+	Email string `json:"email" binding:"required"`
+	Code  string `json:"code" binding:"required,len=6"`
 }

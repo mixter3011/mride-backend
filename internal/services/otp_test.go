@@ -70,3 +70,50 @@ func TestSendOTPDryRun(t *testing.T) {
 	err := otpSvc.SendOTP("+19998880000", code)
 	assert.NoError(t, err)
 }
+
+func TestSaveAndVerifyEmailOTP(t *testing.T) {
+	otpSvc := setupOTPService(t)
+
+	email := "test@example.com"
+	code := otpSvc.GenCode()
+
+	err := otpSvc.SaveEmailOTP(email, code)
+	assert.NoError(t, err)
+
+	err = otpSvc.VerifyEmailOTP(email, code)
+	assert.NoError(t, err)
+
+	err = otpSvc.VerifyEmailOTP(email, code)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid OTP")
+}
+
+func TestExpiredEmailOTP(t *testing.T) {
+	db := testutils.SetupTestDB(t, &models.OTP{})
+	otpSvc := services.NewOTPSvc(db, "testSID", "testToken", "+10000000000")
+
+	expired := models.OTP{
+		Email:     "expired@example.com",
+		Code:      "123456",
+		ExpiresAt: time.Now().Add(-1 * time.Minute),
+		Used:      false,
+	}
+	err := db.Create(&expired).Error
+	assert.NoError(t, err)
+
+	err = otpSvc.VerifyEmailOTP(expired.Email, expired.Code)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "expired")
+}
+
+func TestGenCryptoCode(t *testing.T) {
+	otpSvc := setupOTPService(t)
+
+	code, err := otpSvc.GenCryptoCode()
+	assert.NoError(t, err)
+	assert.Len(t, code, 6)
+
+	for _, char := range code {
+		assert.True(t, char >= '0' && char <= '9', "Code should contain only digits")
+	}
+}

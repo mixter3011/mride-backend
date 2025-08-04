@@ -99,6 +99,8 @@ func main() {
 
 		protected.POST("/auth/send-otp", otpHandler.SendOTP)
 		protected.POST("/auth/verify-otp", otpHandler.VerifyOTP)
+		protected.POST("/auth/send-email-otp", otpHandler.SendEmailOTP)
+		protected.POST("/auth/verify-email-otp", otpHandler.VerifyEmailOTP)
 		protected.GET("/auth/profile", authHandler.GetProfile)
 
 		protected.PUT("/update/profile", authHandler.UpdateProfile)

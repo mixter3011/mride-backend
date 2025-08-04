@@ -69,6 +69,38 @@ func (h *OTPHandler) SendOTP(c *gin.Context) {
 	utils.SuccJSON(c, "OTP sent successfully", nil)
 }
 
+func (h *OTPHandler) SendEmailOTP(c *gin.Context) {
+	var req models.EmailVerifyReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if !utils.ValidEmail(req.Email) {
+		utils.ErrJSON(c, http.StatusBadRequest, "Invalid email format")
+		return
+	}
+
+	_, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	code := h.otpSvc.GenCode()
+	if err := h.otpSvc.SaveEmailOTP(req.Email, code); err != nil {
+		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to generate OTP")
+		return
+	}
+
+	if err := h.otpSvc.SendEmailOTP(req.Email, code); err != nil {
+		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to send email OTP")
+		return
+	}
+
+	utils.SuccJSON(c, "Email OTP sent successfully", nil)
+}
+
 func (h *OTPHandler) VerifyOTP(c *gin.Context) {
 	var req models.OTPVerifyReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -93,4 +125,25 @@ func (h *OTPHandler) VerifyOTP(c *gin.Context) {
 	}
 
 	utils.SuccJSON(c, "Phone verified successfully", nil)
+}
+
+func (h *OTPHandler) VerifyEmailOTP(c *gin.Context) {
+	var req models.EmailOTPVerifyReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	_, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	if err := h.otpSvc.VerifyEmailOTP(req.Email, req.Code); err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.SuccJSON(c, "Email OTP verified successfully", nil)
 }

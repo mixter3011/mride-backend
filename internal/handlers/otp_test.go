@@ -28,8 +28,18 @@ func (m *MockOTPService) GenCode() string {
 	return args.String(0)
 }
 
+func (m *MockOTPService) GenCryptoCode() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockOTPService) SaveOTP(phone, code string) error {
 	args := m.Called(phone, code)
+	return args.Error(0)
+}
+
+func (m *MockOTPService) SaveEmailOTP(email, code string) error {
+	args := m.Called(email, code)
 	return args.Error(0)
 }
 
@@ -45,6 +55,11 @@ func (m *MockOTPService) SendEmailOTP(email, code string) error {
 
 func (m *MockOTPService) VerifyOTP(phone, code string) error {
 	args := m.Called(phone, code)
+	return args.Error(0)
+}
+
+func (m *MockOTPService) VerifyEmailOTP(email, code string) error {
+	args := m.Called(email, code)
 	return args.Error(0)
 }
 
@@ -229,4 +244,122 @@ func TestSendOTPHandlerInvalidPhone(t *testing.T) {
 	err = json.Unmarshal(resp.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Contains(t, response["error"], "Invalid phone format")
+}
+
+func TestSendEmailOTPHandler(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mockOTP := new(MockOTPService)
+	authSvc := setupAuthSvcForOTP(t)
+
+	user := models.User{
+		FullName: "Email OTP User",
+		Email:    "original@example.com",
+	}
+	db := authSvc.GetDB()
+	err := db.Create(&user).Error
+	assert.NoError(t, err)
+
+	mockOTP.On("GenCode").Return("123456")
+	mockOTP.On("SaveEmailOTP", "newemail@example.com", "123456").Return(nil)
+	mockOTP.On("SendEmailOTP", "newemail@example.com", "123456").Return(nil)
+
+	handler := handlers.NewOTPHandler(mockOTP, authSvc)
+
+	router := gin.Default()
+	router.POST("/send-email-otp", func(c *gin.Context) {
+		c.Set("user_id", int(user.ID))
+		handler.SendEmailOTP(c)
+	})
+
+	payload := map[string]string{"email": "newemail@example.com"}
+	body, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequest(http.MethodPost, "/send-email-otp", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	assert.Equal(t, http.StatusOK, resp.Code)
+	mockOTP.AssertExpectations(t)
+}
+
+func TestVerifyEmailOTPHandler(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mockOTP := new(MockOTPService)
+	authSvc := setupAuthSvcForOTP(t)
+
+	user := models.User{
+		FullName: "Verify Email User",
+		Email:    "verify@example.com",
+	}
+	db := authSvc.GetDB()
+	err := db.Create(&user).Error
+	assert.NoError(t, err)
+
+	mockOTP.On("VerifyEmailOTP", "verify@example.com", "123456").Return(nil)
+
+	handler := handlers.NewOTPHandler(mockOTP, authSvc)
+
+	router := gin.Default()
+	router.POST("/verify-email-otp", func(c *gin.Context) {
+		c.Set("user_id", int(user.ID))
+		handler.VerifyEmailOTP(c)
+	})
+
+	payload := map[string]string{
+		"email": "verify@example.com",
+		"code":  "123456",
+	}
+	body, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequest(http.MethodPost, "/verify-email-otp", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	assert.Equal(t, http.StatusOK, resp.Code)
+	mockOTP.AssertExpectations(t)
+}
+
+func TestSendEmailOTPHandlerInvalidEmail(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mockOTP := new(MockOTPService)
+	authSvc := setupAuthSvcForOTP(t)
+
+	user := models.User{
+		FullName: "Test User",
+		Email:    "test@example.com",
+	}
+	db := authSvc.GetDB()
+	err := db.Create(&user).Error
+	assert.NoError(t, err)
+
+	handler := handlers.NewOTPHandler(mockOTP, authSvc)
+
+	router := gin.Default()
+	router.POST("/send-email-otp", func(c *gin.Context) {
+		c.Set("user_id", int(user.ID))
+		handler.SendEmailOTP(c)
+	})
+
+	payload := map[string]string{"email": "invalid-email-format"}
+	body, _ := json.Marshal(payload)
+
+	req, _ := http.NewRequest(http.MethodPost, "/send-email-otp", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	assert.Equal(t, http.StatusBadRequest, resp.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(resp.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response["error"], "Invalid email format")
 }
