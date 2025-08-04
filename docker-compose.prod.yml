@@ -41,6 +41,9 @@ services:
       - TWILIO_PHONE=${TWILIO_PHONE}
       - FIREBASE_CREDENTIALS=${FIREBASE_CREDENTIALS}
       - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_EMAIL=${SMTP_EMAIL}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy
