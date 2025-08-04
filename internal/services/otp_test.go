@@ -71,6 +71,17 @@ func TestSendOTPDryRun(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestSendEmailOTPDryRun(t *testing.T) {
+	t.Skip("Skipping actual Resend SendEmailOTP test (requires valid API key)")
+
+	db := testutils.SetupTestDB(t, &models.OTP{})
+	otpSvc := services.NewOTPSvc(db, "testSID", "testToken", "+10000000000")
+
+	code := "654321"
+	err := otpSvc.SendEmailOTP("test@example.com", code)
+	assert.NoError(t, err)
+}
+
 func TestSaveAndVerifyEmailOTP(t *testing.T) {
 	otpSvc := setupOTPService(t)
 

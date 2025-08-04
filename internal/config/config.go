@@ -14,10 +14,7 @@ type Config struct {
 	TwilioSID           string
 	TwilioToken         string
 	TwilioPhone         string
-	EmailSender         string
-	EmailAPIKey         string
-	EmailDomain         string
-	GoogleAPIKey        string
+	ResendAPIKey        string
 	FirebaseCredentials string
 	FirebaseProjectID   string
 }
@@ -34,10 +31,7 @@ func Load() *Config {
 		TwilioSID:           getEnv("TWILIO_SID", ""),
 		TwilioToken:         getEnv("TWILIO_TOKEN", ""),
 		TwilioPhone:         getEnv("TWILIO_PHONE", ""),
-		EmailSender:         getEnv("EMAIL_SENDER", "noreply@yourdomain.com"),
-		EmailAPIKey:         getEnv("EMAIL_API_KEY", ""),
-		EmailDomain:         getEnv("EMAIL_DOMAIN", "yourdomain.com"),
-		GoogleAPIKey:        getEnv("GOOGLE_API_KEY", ""),
+		ResendAPIKey:        getEnv("RESEND_API_KEY", ""),
 		FirebaseCredentials: getEnv("FIREBASE_CREDENTIALS", ""),
 		FirebaseProjectID:   getEnv("FIREBASE_PROJECT_ID", ""),
 	}

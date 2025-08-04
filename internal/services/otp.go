@@ -1,7 +1,6 @@
 package services
 
 import (
-	"crypto/tls"
 	"fmt"
 	"math/rand"
 	"mride-backend/internal/models"
@@ -11,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/gomail.v2"
+	"github.com/resend/resend-go/v2"
 	"gorm.io/gorm"
 )
 
@@ -21,10 +20,7 @@ type OTPSvc struct {
 	twilioToken string
 	twilioPhone string
 
-	smtpHost     string
-	smtpPort     int
-	smtpEmail    string
-	smtpPassword string
+	resendAPIKey string
 }
 
 func NewOTPSvc(db *gorm.DB, sid, token, phone string) *OTPSvc {
@@ -34,10 +30,7 @@ func NewOTPSvc(db *gorm.DB, sid, token, phone string) *OTPSvc {
 		twilioToken: token,
 		twilioPhone: phone,
 
-		smtpHost:     os.Getenv("SMTP_HOST"),
-		smtpPort:     587,
-		smtpEmail:    os.Getenv("SMTP_EMAIL"),
-		smtpPassword: os.Getenv("SMTP_PASSWORD"),
+		resendAPIKey: os.Getenv("RESEND_API_KEY"),
 	}
 }
 
@@ -169,22 +162,18 @@ func (o *OTPSvc) SendOTP(phone, code string) error {
 func (o *OTPSvc) SendEmailOTP(email, code string) error {
 	fmt.Printf("Sending Email OTP %s to email %s\n", code, email)
 
-	m := gomail.NewMessage()
+	client := resend.NewClient(o.resendAPIKey)
 
-	m.SetHeader("From", o.smtpEmail)
+	params := &resend.SendEmailRequest{
+		From:    "MRIDE <auth@yourdomain.com>",
+		To:      []string{email},
+		Subject: "OTP for MRIDE",
+		Text:    fmt.Sprintf("%s is your OTP to verify authentication for MRIDE. This OTP will expire in 5 minutes.", code),
+	}
 
-	m.SetHeader("To", email)
-
-	m.SetHeader("Subject", "OTP for MRIDE")
-
-	m.SetBody("text/plain", fmt.Sprintf("%s is your OTP to verify authentication for MRIDE. This OTP will expire in 5 minutes.", code))
-
-	d := gomail.NewDialer(o.smtpHost, o.smtpPort, o.smtpEmail, o.smtpPassword)
-
-	d.TLSConfig = &tls.Config{InsecureSkipVerify: true}
-
-	if err := d.DialAndSend(m); err != nil {
-		return fmt.Errorf("failed to send email: %v", err)
+	_, err := client.Emails.Send(params)
+	if err != nil {
+		return fmt.Errorf("failed to send email via Resend: %v", err)
 	}
 
 	return nil
