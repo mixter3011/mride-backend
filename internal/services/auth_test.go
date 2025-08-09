@@ -195,15 +195,31 @@ func TestPhoneAndLocationUpdates(t *testing.T) {
 }
 
 func TestValidateRefreshToken(t *testing.T) {
-	authSvc, _ := createAuthSvc(t)
+	authSvc, db := createAuthSvc(t)
 
-	refreshToken, err := authSvc.GenToken(101, "test@example.com")
+	user := models.User{
+		FullName:     "Test User",
+		Email:        "test@example.com",
+		PasswordHash: "hash",
+	}
+	assert.NoError(t, db.Create(&user).Error)
+
+	refreshToken, err := authSvc.GenRefreshToken(int(user.ID))
 	assert.NoError(t, err)
+
+	user.RefreshToken = refreshToken
+	user.RefreshTokenExpiry = time.Now().Add(7 * 24 * time.Hour)
+	assert.NoError(t, db.Save(&user).Error)
 
 	claims, err := authSvc.ValidateRefreshToken(refreshToken)
 	assert.NoError(t, err)
-	assert.Equal(t, 101, claims.UserID)
+	assert.Equal(t, int(user.ID), claims.UserID)
 
 	_, err = authSvc.ValidateRefreshToken("invalid.token.value")
 	assert.Error(t, err)
+
+	otherToken, _ := authSvc.GenRefreshToken(999)
+	_, err = authSvc.ValidateRefreshToken(otherToken)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "refresh token not found or invalid")
 }

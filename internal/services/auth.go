@@ -225,11 +225,32 @@ func (a *AuthSvc) VerifyPhone(userID int) error {
 }
 
 func (a *AuthSvc) ValidateRefreshToken(token string) (*Claims, error) {
-	return a.jwtSvc.ValidToken(token)
+	claims, err := a.jwtSvc.ValidToken(token)
+	if err != nil {
+		return nil, err
+	}
+
+	var user models.User
+	if err := a.db.Where("id = ? AND refresh_token = ?", claims.UserID, token).First(&user).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("refresh token not found or invalid")
+		}
+		return nil, err
+	}
+
+	if time.Now().After(user.RefreshTokenExpiry) {
+		return nil, fmt.Errorf("refresh token expired")
+	}
+
+	return claims, nil
 }
 
 func (a *AuthSvc) GenToken(userID int, email string) (string, error) {
 	return a.jwtSvc.GenToken(userID, email)
+}
+
+func (a *AuthSvc) GenRefreshToken(userID int) (string, error) {
+	return a.jwtSvc.GenRefreshToken(userID)
 }
 
 func (a *AuthSvc) Logout(userID int) error {
