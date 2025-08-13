@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"strconv"
+	"os"
 	"time"
 
 	"mride-backend/internal/models"
@@ -432,50 +432,45 @@ func (r *RideSvc) calculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
 }
 
 func (r *RideSvc) getCoordinates(address string) (float64, float64, error) {
-	baseURL := "https://nominatim.openstreetmap.org/search"
-	params := url.Values{}
-	params.Add("q", address)
-	params.Add("format", "json")
-	params.Add("limit", "1")
-
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", baseURL+"?"+params.Encode(), nil)
-	if err != nil {
-		return 0, 0, err
+	apiKey := os.Getenv("GOOGLE_MAPS_API_KEY")
+	if apiKey == "" {
+		return 0, 0, fmt.Errorf("google Maps API key not configured")
 	}
 
-	req.Header.Set("User-Agent", "CarPoolApp/1.0")
+	baseURL := "https://maps.googleapis.com/maps/api/geocode/json"
+	params := url.Values{}
+	params.Add("address", address)
+	params.Add("key", apiKey)
+	params.Add("region", "in")
 
-	resp, err := client.Do(req)
+	resp, err := http.Get(baseURL + "?" + params.Encode())
 	if err != nil {
 		return 0, 0, err
 	}
 	defer resp.Body.Close()
 
-	var results []struct {
-		Lat string `json:"lat"`
-		Lon string `json:"lon"`
+	var result struct {
+		Status  string `json:"status"`
+		Results []struct {
+			Geometry struct {
+				Location struct {
+					Lat float64 `json:"lat"`
+					Lng float64 `json:"lng"`
+				} `json:"location"`
+			} `json:"geometry"`
+		} `json:"results"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return 0, 0, err
 	}
 
-	if len(results) == 0 {
+	if result.Status != "OK" || len(result.Results) == 0 {
 		return 0, 0, fmt.Errorf("location not found: %s", address)
 	}
 
-	lat, err := strconv.ParseFloat(results[0].Lat, 64)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	lng, err := strconv.ParseFloat(results[0].Lon, 64)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	return lat, lng, nil
+	location := result.Results[0].Geometry.Location
+	return location.Lat, location.Lng, nil
 }
 
 func (r *RideSvc) StartRide(userID, rideID uint, req models.StartRideReq) error {

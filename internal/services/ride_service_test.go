@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -844,13 +845,24 @@ func TestCalculateDistance(t *testing.T) {
 	assert.Less(t, distance, 200.0)
 }
 func TestGetCoordinates_Success(t *testing.T) {
+	os.Setenv("GOOGLE_MAPS_API_KEY", "test_api_key")
+	defer os.Unsetenv("GOOGLE_MAPS_API_KEY")
 	rideSvc := &RideSvc{}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write([]byte(`[{"lat":"19.0760","lon":"72.8777"}]`)); err != nil {
-			t.Errorf("Failed to write response: %v", err)
-		}
+		response := `{
+			"status": "OK",
+			"results": [{
+				"geometry": {
+					"location": {
+						"lat": 19.0760,
+						"lng": 72.8777
+					}
+				}
+			}]
+		}`
+		w.Write([]byte(response))
 	}))
 	defer server.Close()
 
@@ -859,8 +871,8 @@ func TestGetCoordinates_Success(t *testing.T) {
 	if err != nil {
 		assert.Contains(t, err.Error(), "location not found")
 	} else {
-		assert.Greater(t, lat, 0.0)
-		assert.Greater(t, lng, 0.0)
+		assert.Equal(t, 19.0760, lat)
+		assert.Equal(t, 72.8777, lng)
 	}
 }
 func TestGetAllUserRides(t *testing.T) {
