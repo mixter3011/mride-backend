@@ -50,6 +50,10 @@ func main() {
 	notificationSvc := services.NewNotificationSvc(database, webSocketSvc)
 	rideSvc := services.NewRideSvc(database, notificationSvc)
 
+	if err := rideSvc.CleanupExpiredRides(); err != nil {
+		log.Printf("Warning: Failed to cleanup expired rides: %v", err)
+	}
+
 	authHandler := handlers.NewAuthHandler(authSvc, otpSvc)
 	fmt.Println("Creating handlers...")
 	otpHandler := handlers.NewOTPHandler(otpSvc, authSvc)

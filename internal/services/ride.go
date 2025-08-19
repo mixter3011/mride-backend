@@ -179,8 +179,13 @@ func (r *RideSvc) GetNearbyRides(userID uint, req models.NearbyRidesReq) ([]mode
 		req.RadiusKM = 10
 	}
 
+	now := time.Now()
+
 	var rides []models.Ride
-	err := r.db.Preload("User").Order("created_at DESC").Find(&rides).Error
+	err := r.db.Preload("User").
+		Where("departure_time >= ? AND status = ?", now, "active").
+		Order("created_at DESC").
+		Find(&rides).Error
 	if err != nil {
 		return nil, err
 	}
@@ -657,4 +662,11 @@ func (r *RideSvc) GetActiveRidesForUser(userID uint) ([]models.RideProgressResp,
 	}
 
 	return progressList, nil
+}
+
+func (r *RideSvc) CleanupExpiredRides() error {
+	now := time.Now()
+	return r.db.Model(&models.Ride{}).
+		Where("departure_time < ? AND status = ?", now, "active").
+		Update("status", "expired").Error
 }

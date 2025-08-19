@@ -959,6 +959,7 @@ func TestGetNearbyRides(t *testing.T) {
 
 	driver := createTestUser(db, 1, "Driver")
 
+	futureTime := time.Now().Add(2 * time.Hour)
 	ride := models.Ride{
 		UserID:         driver.ID,
 		CarNumber:      "ABC123",
@@ -970,10 +971,27 @@ func TestGetNearbyRides(t *testing.T) {
 		FromLongitude:  72.8777,
 		ToLatitude:     18.5204,
 		ToLongitude:    73.8567,
-		DepartureTime:  time.Now().Add(2 * time.Hour),
+		DepartureTime:  futureTime,
 		Status:         "active",
 	}
 	db.Create(&ride)
+
+	pastTime := time.Now().Add(-1 * time.Hour)
+	pastRide := models.Ride{
+		UserID:         driver.ID,
+		CarNumber:      "XYZ789",
+		CarModel:       "Toyota Corolla",
+		PassengerCount: 2,
+		FromLocation:   "Delhi",
+		ToLocation:     "Gurgaon",
+		FromLatitude:   28.7041,
+		FromLongitude:  77.1025,
+		ToLatitude:     28.4595,
+		ToLongitude:    77.0266,
+		DepartureTime:  pastTime,
+		Status:         "active",
+	}
+	db.Create(&pastRide)
 
 	req := models.NearbyRidesReq{
 		FromLatitude:  19.0800,
@@ -1005,4 +1023,38 @@ func TestGetNearbyRides_DefaultRadius(t *testing.T) {
 	_, err := rideSvc.GetNearbyRides(1, req)
 
 	assert.NoError(t, err)
+}
+
+func TestCleanupExpiredRides(t *testing.T) {
+	db := setupRideTestDB(t)
+	rideSvc := NewRideSvc(db, nil)
+
+	driver := createTestUser(db, 1, "Driver")
+
+	pastRide := models.Ride{
+		UserID:         driver.ID,
+		DepartureTime:  time.Now().Add(-2 * time.Hour),
+		Status:         "active",
+		PassengerCount: 2,
+	}
+	db.Create(&pastRide)
+
+	futureRide := models.Ride{
+		UserID:         driver.ID,
+		DepartureTime:  time.Now().Add(2 * time.Hour),
+		Status:         "active",
+		PassengerCount: 2,
+	}
+	db.Create(&futureRide)
+
+	err := rideSvc.CleanupExpiredRides()
+	assert.NoError(t, err)
+
+	var updatedPastRide models.Ride
+	db.First(&updatedPastRide, pastRide.ID)
+	assert.Equal(t, "expired", updatedPastRide.Status)
+
+	var updatedFutureRide models.Ride
+	db.First(&updatedFutureRide, futureRide.ID)
+	assert.Equal(t, "active", updatedFutureRide.Status)
 }
