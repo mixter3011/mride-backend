@@ -84,8 +84,7 @@ func NewWebSocketSvc(db *gorm.DB) *WebSocketSvc {
 			CheckOrigin: func(r *http.Request) bool {
 				origin := r.Header.Get("Origin")
 				allowedOrigins := []string{
-					"",
-					"",
+					"https://mride.senachi.me",
 				}
 
 				for _, allowed := range allowedOrigins {
@@ -94,10 +93,14 @@ func NewWebSocketSvc(db *gorm.DB) *WebSocketSvc {
 					}
 				}
 
-				return strings.Contains(origin, "localhost") || origin == ""
+				return strings.Contains(origin, "localhost") ||
+					strings.Contains(origin, "127.0.0.1") ||
+					origin == ""
 			},
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
+			ReadBufferSize:   1024,
+			WriteBufferSize:  1024,
+			HandshakeTimeout: 10 * time.Second,
+			Subprotocols:     []string{"access_token"},
 		},
 	}
 }
