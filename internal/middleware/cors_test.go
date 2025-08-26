@@ -27,7 +27,7 @@ func TestCORSMiddleware_Headers(t *testing.T) {
 	headers := w.Header()
 	assert.Equal(t, "*", headers.Get("Access-Control-Allow-Origin"))
 	assert.Equal(t, "true", headers.Get("Access-Control-Allow-Credentials"))
-	assert.Equal(t, "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With", headers.Get("Access-Control-Allow-Headers"))
+	assert.Equal(t, "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, Sec-WebSocket-Protocol, Sec-WebSocket-Key, Sec-WebSocket-Version, Connection, Upgrade", headers.Get("Access-Control-Allow-Headers"))
 	assert.Equal(t, "POST, OPTIONS, GET, PUT, DELETE", headers.Get("Access-Control-Allow-Methods"))
 }
 
