@@ -3,7 +3,6 @@ package handlers
 import (
 	"net/http"
 	"strconv"
-	"strings"
 
 	"mride-backend/internal/services"
 	"mride-backend/internal/utils"
@@ -24,46 +23,20 @@ func NewWebSocketHandler(webSocketSvc *services.WebSocketSvc, jwtSvc *services.J
 }
 
 func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
-	token := ""
-	selectedProtocol := ""
-
-	authHeader := c.GetHeader("Authorization")
-	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
-		token = strings.TrimPrefix(authHeader, "Bearer ")
-	}
-
-	if token == "" {
-		protocols := c.GetHeader("Sec-WebSocket-Protocol")
-		if protocols != "" {
-			parts := strings.Split(protocols, ", ")
-			for _, part := range parts {
-				if strings.HasPrefix(part, "access_token.") {
-					token = strings.TrimPrefix(part, "access_token.")
-					selectedProtocol = "access_token"
-					break
-				}
-			}
-		}
-	}
-
-	if token == "" {
-		c.Header("Sec-WebSocket-Protocol", "access_token")
-		utils.ErrJSON(c, http.StatusUnauthorized, "Authentication required")
+	// Extract userID from context (set by main.go authentication)
+	userIDInterface, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User ID not found in context")
 		return
 	}
 
-	claims, err := h.jwtSvc.ValidToken(token)
-	if err != nil {
-		utils.ErrJSON(c, http.StatusUnauthorized, "Invalid token")
+	userID, ok := userIDInterface.(int)
+	if !ok {
+		utils.ErrJSON(c, http.StatusUnauthorized, "Invalid user ID format")
 		return
 	}
 
-	userID := claims.UserID
-
-	if selectedProtocol != "" {
-		c.Header("Sec-WebSocket-Protocol", selectedProtocol)
-	}
-
+	// Handle the WebSocket connection
 	h.webSocketSvc.HandleConnection(c.Writer, c.Request, userID)
 }
 

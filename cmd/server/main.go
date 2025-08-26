@@ -155,7 +155,7 @@ func main() {
 			if token != "" {
 				claims, err := jwtSvc.ValidToken(token)
 				if err != nil {
-					c.Header("Sec-WebSocket-Protocol", "access_token")
+					c.Header("Sec-WebSocket-Protocol", "")
 					utils.ErrJSON(c, http.StatusUnauthorized, "Invalid token")
 					return
 				}
@@ -168,11 +168,23 @@ func main() {
 			}
 		}
 
-		middleware.WebSocketAuthMiddleware(jwtSvc)(c)
-		if c.IsAborted() {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+			token := strings.TrimPrefix(authHeader, "Bearer ")
+			claims, err := jwtSvc.ValidToken(token)
+			if err != nil {
+				utils.ErrJSON(c, http.StatusUnauthorized, "Invalid token")
+				return
+			}
+
+			c.Set("user_id", claims.UserID)
+			c.Set("email", claims.Email)
+			webSocketHandler.HandleWebSocket(c)
 			return
 		}
-		webSocketHandler.HandleWebSocket(c)
+
+		// No valid authentication found
+		utils.ErrJSON(c, http.StatusUnauthorized, "Authentication required")
 	})
 
 	srv := &http.Server{
