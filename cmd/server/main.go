@@ -141,9 +141,12 @@ func main() {
 	}
 
 	r.GET("/ws", func(c *gin.Context) {
+		var token string
+		var userID int
+		var email string
+
 		protocols := c.GetHeader("Sec-WebSocket-Protocol")
-		if protocols != "" && strings.Contains(protocols, "access_token.") {
-			var token string
+		if protocols != "" {
 			parts := strings.Split(protocols, ", ")
 			for _, part := range parts {
 				if strings.HasPrefix(part, "access_token.") {
@@ -151,40 +154,37 @@ func main() {
 					break
 				}
 			}
+		}
 
-			if token != "" {
-				claims, err := jwtSvc.ValidToken(token)
-				if err != nil {
-					c.Header("Sec-WebSocket-Protocol", "")
-					utils.ErrJSON(c, http.StatusUnauthorized, "Invalid token")
-					return
-				}
-
-				c.Set("user_id", claims.UserID)
-				c.Set("email", claims.Email)
-				c.Header("Sec-WebSocket-Protocol", "access_token")
-				webSocketHandler.HandleWebSocket(c)
-				return
+		if token == "" {
+			authHeader := c.GetHeader("Authorization")
+			if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+				token = strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
 			}
 		}
 
-		authHeader := c.GetHeader("Authorization")
-		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
-			token := strings.TrimPrefix(authHeader, "Bearer ")
-			claims, err := jwtSvc.ValidToken(token)
-			if err != nil {
-				utils.ErrJSON(c, http.StatusUnauthorized, "Invalid token")
-				return
-			}
-
-			c.Set("user_id", claims.UserID)
-			c.Set("email", claims.Email)
-			webSocketHandler.HandleWebSocket(c)
+		if token == "" {
+			utils.ErrJSON(c, http.StatusUnauthorized, "Authentication required")
 			return
 		}
 
-		// No valid authentication found
-		utils.ErrJSON(c, http.StatusUnauthorized, "Authentication required")
+		claims, err := jwtSvc.ValidToken(token)
+		if err != nil {
+			utils.ErrJSON(c, http.StatusUnauthorized, "Invalid token")
+			return
+		}
+
+		userID = claims.UserID
+		email = claims.Email
+
+		if protocols != "" && strings.Contains(protocols, "access_token.") {
+			c.Header("Sec-WebSocket-Protocol", "access_token")
+		}
+
+		c.Set("user_id", userID)
+		c.Set("email", email)
+
+		webSocketHandler.HandleWebSocket(c)
 	})
 
 	srv := &http.Server{
