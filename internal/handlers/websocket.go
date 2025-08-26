@@ -27,13 +27,11 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 	token := ""
 	selectedProtocol := ""
 
-	// First check Authorization header
 	authHeader := c.GetHeader("Authorization")
 	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
 		token = strings.TrimPrefix(authHeader, "Bearer ")
 	}
 
-	// If no token in header, check WebSocket protocols
 	if token == "" {
 		protocols := c.GetHeader("Sec-WebSocket-Protocol")
 		if protocols != "" {
@@ -41,7 +39,7 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 			for _, part := range parts {
 				if strings.HasPrefix(part, "access_token.") {
 					token = strings.TrimPrefix(part, "access_token.")
-					selectedProtocol = part
+					selectedProtocol = "access_token"
 					break
 				}
 			}
@@ -62,7 +60,6 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 
 	userID := claims.UserID
 
-	// Set the protocol header for proper WebSocket handshake
 	if selectedProtocol != "" {
 		c.Header("Sec-WebSocket-Protocol", selectedProtocol)
 	}

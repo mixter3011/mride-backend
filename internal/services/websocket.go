@@ -100,7 +100,7 @@ func NewWebSocketSvc(db *gorm.DB) *WebSocketSvc {
 			ReadBufferSize:   1024,
 			WriteBufferSize:  1024,
 			HandshakeTimeout: 10 * time.Second,
-			Subprotocols:     []string{"access_token"},
+			Subprotocols:     []string{},
 		},
 	}
 }
