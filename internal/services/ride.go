@@ -28,7 +28,7 @@ func NewRideSvc(db *gorm.DB, notificationSvc NotificationSvcInterface) *RideSvc 
 }
 
 func (r *RideSvc) CreateRide(userID uint, req models.CreateRideReq) (*models.RideResp, error) {
-	if req.DepartureTime.Before(time.Now()) {
+	if req.DepartureTime.Before(time.Now().UTC()) {
 		return nil, fmt.Errorf("departure time must be in the future")
 	}
 
