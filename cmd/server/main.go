@@ -16,7 +16,6 @@ import (
 	"mride-backend/internal/handlers"
 	"mride-backend/internal/middleware"
 	"mride-backend/internal/services"
-	"mride-backend/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -145,13 +144,18 @@ func main() {
 		var userID int
 		var email string
 
-		protocols := c.GetHeader("Sec-WebSocket-Protocol")
-		if protocols != "" {
-			parts := strings.Split(protocols, ", ")
-			for _, part := range parts {
-				if strings.HasPrefix(part, "access_token.") {
-					token = strings.TrimPrefix(part, "access_token.")
-					break
+		token = c.Query("token")
+
+		if token == "" {
+			protocols := c.GetHeader("Sec-WebSocket-Protocol")
+			if protocols != "" {
+				parts := strings.Split(protocols, ", ")
+				for _, part := range parts {
+					if strings.HasPrefix(part, "access_token.") {
+						token = strings.TrimPrefix(part, "access_token.")
+						c.Header("Sec-WebSocket-Protocol", "access_token")
+						break
+					}
 				}
 			}
 		}
@@ -164,22 +168,18 @@ func main() {
 		}
 
 		if token == "" {
-			utils.ErrJSON(c, http.StatusUnauthorized, "Authentication required")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 			return
 		}
 
 		claims, err := jwtSvc.ValidToken(token)
 		if err != nil {
-			utils.ErrJSON(c, http.StatusUnauthorized, "Invalid token")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			return
 		}
 
 		userID = claims.UserID
 		email = claims.Email
-
-		if protocols != "" && strings.Contains(protocols, "access_token.") {
-			c.Header("Sec-WebSocket-Protocol", "access_token")
-		}
 
 		c.Set("user_id", userID)
 		c.Set("email", email)

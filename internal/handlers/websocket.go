@@ -23,7 +23,7 @@ func NewWebSocketHandler(webSocketSvc *services.WebSocketSvc, jwtSvc *services.J
 }
 
 func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
-	// Extract userID from context (set by main.go authentication)
+
 	userIDInterface, exists := c.Get("user_id")
 	if !exists {
 		utils.ErrJSON(c, http.StatusUnauthorized, "User ID not found in context")
@@ -36,7 +36,6 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
-	// Handle the WebSocket connection
 	h.webSocketSvc.HandleConnection(c.Writer, c.Request, userID)
 }
 
