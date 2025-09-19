@@ -129,39 +129,28 @@ func (ws *WebSocketSvc) HandleConnection(w http.ResponseWriter, r *http.Request,
 		ConnectedAt: now,
 		LastPong:    now,
 		IsActive:    true,
+		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
 
-	log.Printf("[DEBUG] Upserting connection record for user %d", userID)
+	log.Printf("[DEBUG] Creating connection record for user %d", userID)
 
-	result := ws.db.Exec(`
-		INSERT INTO user_connections (user_id, ip, connected_at, last_pong, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (user_id) 
-		DO UPDATE SET 
-			ip = EXCLUDED.ip,
-			connected_at = EXCLUDED.connected_at,
-			last_pong = EXCLUDED.last_pong,
-			is_active = EXCLUDED.is_active,
-			updated_at = EXCLUDED.updated_at
-		RETURNING id
-	`, userID, clientIP, now, now, true, now, now)
+	result := ws.db.Model(&UserConnection{}).
+		Where("user_id = ? AND is_active = ?", userID, true).
+		Update("is_active", false)
 
 	if result.Error != nil {
-		log.Printf("[ERROR] Failed to upsert user connection for user %d: %v", userID, result.Error)
+		log.Printf("[ERROR] Failed to deactivate existing connections for user %d: %v", userID, result.Error)
+	}
+
+	if err := ws.db.Create(&userConn).Error; err != nil {
+		log.Printf("[ERROR] Failed to create user connection for user %d: %v", userID, err)
 		conn.Close()
 		return
 	}
 
-	var connectionID uint
-	err = ws.db.Raw("SELECT id FROM user_connections WHERE user_id = ?", userID).Scan(&connectionID).Error
-	if err != nil {
-		log.Printf("[ERROR] Failed to get connection ID for user %d: %v", userID, err)
-		conn.Close()
-		return
-	}
-	userConn.ID = connectionID
-	log.Printf("[DEBUG] Upserted user connection with ID: %d for user %d", connectionID, userID)
+	connectionID := userConn.ID
+	log.Printf("[DEBUG] Created user connection with ID: %d for user %d", connectionID, userID)
 
 	connLog := ConnectionLog{
 		UserID:      userID,

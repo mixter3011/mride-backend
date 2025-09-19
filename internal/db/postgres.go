@@ -8,6 +8,7 @@ import (
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func New(dbUrl string) (*gorm.DB, error) {
@@ -18,7 +19,9 @@ func New(dbUrl string) (*gorm.DB, error) {
 		}
 	}
 
-	db, err := gorm.Open(postgres.Open(dbUrl), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(dbUrl), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Info),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -32,6 +35,8 @@ func New(dbUrl string) (*gorm.DB, error) {
 		return nil, err
 	}
 
+	db.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
+
 	err = db.AutoMigrate(
 		&models.User{},
 		&models.OTP{},
@@ -43,10 +48,21 @@ func New(dbUrl string) (*gorm.DB, error) {
 		&services.ConnectionLog{},
 	)
 	if err != nil {
+		log.Printf("AutoMigrate error: %v", err)
 		return nil, err
 	}
 
 	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_fcm_tokens_user_device ON user_fcm_tokens(user_id, device_id)")
-	log.Println("Connected to database with GORM")
+
+	if !db.Migrator().HasTable(&services.UserConnection{}) {
+		log.Println("ERROR: user_connections table was not created")
+		return nil, err
+	}
+	if !db.Migrator().HasTable(&services.ConnectionLog{}) {
+		log.Println("ERROR: connection_logs table was not created")
+		return nil, err
+	}
+
+	log.Println("Connected to database with GORM - all tables migrated successfully")
 	return db, nil
 }
