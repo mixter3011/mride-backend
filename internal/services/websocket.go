@@ -15,24 +15,32 @@ import (
 )
 
 type UserConnection struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`
+	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id"`
 	UserID      int       `gorm:"not null;index" json:"user_id"`
 	IP          string    `gorm:"size:45" json:"ip"`
-	ConnectedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"connected_at"`
-	LastPong    time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"last_pong"`
-	IsActive    bool      `gorm:"default:true" json:"is_active"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ConnectedAt time.Time `gorm:"not null" json:"connected_at"`
+	LastPong    time.Time `gorm:"not null" json:"last_pong"`
+	IsActive    bool      `gorm:"default:true;index" json:"is_active"`
+	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+func (UserConnection) TableName() string {
+	return "user_connections"
 }
 
 type ConnectionLog struct {
-	ID             uint       `gorm:"primaryKey" json:"id"`
-	UserID         int        `gorm:"not null" json:"user_id"`
+	ID             uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID         int        `gorm:"not null;index" json:"user_id"`
 	IP             string     `gorm:"size:45" json:"ip"`
-	ConnectedAt    time.Time  `gorm:"default:CURRENT_TIMESTAMP" json:"connected_at"`
+	ConnectedAt    time.Time  `gorm:"not null" json:"connected_at"`
 	DisconnectedAt *time.Time `json:"disconnected_at"`
 	Duration       *int64     `json:"duration"`
-	CreatedAt      time.Time  `json:"created_at"`
+	CreatedAt      time.Time  `gorm:"autoCreateTime" json:"created_at"`
+}
+
+func (ConnectionLog) TableName() string {
+	return "connection_logs"
 }
 
 type WebSocketSvc struct {
@@ -75,6 +83,15 @@ func NewWebSocketSvc(db *gorm.DB) *WebSocketSvc {
 	if err := db.AutoMigrate(&UserConnection{}, &ConnectionLog{}); err != nil {
 		log.Printf("Failed to auto-migrate websocket models: %v", err)
 	}
+
+	if !db.Migrator().HasTable(&UserConnection{}) {
+		log.Fatal("user_connections table was not created")
+	}
+	if !db.Migrator().HasTable(&ConnectionLog{}) {
+		log.Fatal("connection_logs table was not created")
+	}
+
+	log.Println("WebSocket tables verified successfully")
 
 	return &WebSocketSvc{
 		db:          db,
