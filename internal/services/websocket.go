@@ -107,16 +107,21 @@ func NewWebSocketSvc(db *gorm.DB) *WebSocketSvc {
 
 func (ws *WebSocketSvc) HandleConnection(w http.ResponseWriter, r *http.Request, userID int) {
 	clientIP := ws.getClientIP(r)
+	log.Printf("[DEBUG] WebSocket connection attempt from user %d, IP %s", userID, clientIP)
+
 	if !ws.checkRateLimit(clientIP) {
+		log.Printf("[DEBUG] Rate limit exceeded for IP %s", clientIP)
 		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
+	log.Printf("[DEBUG] Rate limit check passed for IP %s", clientIP)
 
 	conn, err := ws.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
+		log.Printf("[ERROR] WebSocket upgrade failed for user %d: %v", userID, err)
 		return
 	}
+	log.Printf("[DEBUG] WebSocket upgrade successful for user %d", userID)
 
 	userConn := UserConnection{
 		UserID:      userID,
@@ -126,22 +131,33 @@ func (ws *WebSocketSvc) HandleConnection(w http.ResponseWriter, r *http.Request,
 		IsActive:    true,
 	}
 
-	ws.db.Model(&UserConnection{}).Where("user_id = ? AND is_active = ?", userID, true).
+	log.Printf("[DEBUG] Deactivating existing connections for user %d", userID)
+	result := ws.db.Model(&UserConnection{}).Where("user_id = ? AND is_active = ?", userID, true).
 		Update("is_active", false)
+	if result.Error != nil {
+		log.Printf("[ERROR] Failed to deactivate existing connections for user %d: %v", userID, result.Error)
+	} else {
+		log.Printf("[DEBUG] Deactivated %d existing connections for user %d", result.RowsAffected, userID)
+	}
 
+	log.Printf("[DEBUG] Creating new connection record for user %d", userID)
 	if err := ws.db.Create(&userConn).Error; err != nil {
-		log.Printf("Failed to create user connection record: %v", err)
+		log.Printf("[ERROR] Failed to create user connection record for user %d: %v", userID, err)
 		conn.Close()
 		return
 	}
+	log.Printf("[DEBUG] Created user connection record with ID: %d for user %d", userConn.ID, userID)
 
 	connLog := ConnectionLog{
 		UserID:      userID,
 		IP:          clientIP,
 		ConnectedAt: time.Now(),
 	}
+	log.Printf("[DEBUG] Creating connection log for user %d", userID)
 	if err := ws.db.Create(&connLog).Error; err != nil {
-		log.Printf("Failed to create connection log: %v", err)
+		log.Printf("[ERROR] Failed to create connection log for user %d: %v", userID, err)
+	} else {
+		log.Printf("[DEBUG] Created connection log with ID: %d for user %d", connLog.ID, userID)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -156,15 +172,18 @@ func (ws *WebSocketSvc) HandleConnection(w http.ResponseWriter, r *http.Request,
 		ip:           clientIP,
 		connectedAt:  time.Now(),
 	}
+	log.Printf("[DEBUG] Created client struct for user %d", userID)
 
 	ws.clientsMux.Lock()
 	if existingClient, exists := ws.clients[userID]; exists {
+		log.Printf("[DEBUG] Cleaning up existing client for user %d", userID)
 		existingClient.cleanup(ws)
 	}
 	ws.clients[userID] = client
 	ws.clientsMux.Unlock()
+	log.Printf("[DEBUG] Added client to clients map for user %d", userID)
 
-	log.Printf("User %d connected via WebSocket from IP %s", userID, clientIP)
+	log.Printf("[INFO] User %d connected via WebSocket from IP %s", userID, clientIP)
 
 	welcomeMsg := WSMessage{
 		Type:    "connected",
@@ -175,16 +194,23 @@ func (ws *WebSocketSvc) HandleConnection(w http.ResponseWriter, r *http.Request,
 			"connected_at":  userConn.ConnectedAt,
 		},
 	}
+	log.Printf("[DEBUG] Prepared welcome message for user %d", userID)
+
+	log.Printf("[DEBUG] Attempting to send welcome message to user %d", userID)
 	select {
 	case client.send <- welcomeMsg:
+		log.Printf("[DEBUG] Welcome message queued successfully for user %d", userID)
 	default:
+		log.Printf("[ERROR] Failed to queue welcome message for user %d - channel full or closed", userID)
 		close(client.send)
 		ws.removeClient(userID)
 		return
 	}
 
+	log.Printf("[DEBUG] Starting read and write pumps for user %d", userID)
 	go client.writePump(ws)
 	go client.readPump(ws)
+	log.Printf("[DEBUG] Started goroutines for user %d", userID)
 }
 
 func (ws *WebSocketSvc) getClientIP(r *http.Request) string {
@@ -227,44 +253,72 @@ func (ws *WebSocketSvc) checkRateLimit(clientIP string) bool {
 }
 
 func (c *Client) cleanup(ws *WebSocketSvc) {
+	log.Printf("[DEBUG] Starting cleanup for user %d", c.userID)
+
 	c.cancel()
+	log.Printf("[DEBUG] Context cancelled for user %d", c.userID)
+
 	if c.send != nil {
 		close(c.send)
+		log.Printf("[DEBUG] Send channel closed for user %d", c.userID)
 	}
+
 	if c.conn != nil {
-		c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			log.Printf("[ERROR] Failed to close WebSocket connection for user %d: %v", c.userID, err)
+		} else {
+			log.Printf("[DEBUG] WebSocket connection closed for user %d", c.userID)
+		}
 	}
 
 	disconnectedAt := time.Now()
 	duration := int64(disconnectedAt.Sub(c.connectedAt).Seconds())
+	log.Printf("[DEBUG] Calculated session duration for user %d: %d seconds", c.userID, duration)
 
-	ws.db.Model(&UserConnection{}).Where("id = ?", c.connectionID).
+	result := ws.db.Model(&UserConnection{}).Where("id = ?", c.connectionID).
 		Updates(map[string]interface{}{
 			"is_active": false,
 			"last_pong": c.lastPong,
 		})
+	if result.Error != nil {
+		log.Printf("[ERROR] Failed to update UserConnection for user %d: %v", c.userID, result.Error)
+	} else {
+		log.Printf("[DEBUG] Updated UserConnection (rows affected: %d) for user %d", result.RowsAffected, c.userID)
+	}
 
-	ws.db.Model(&ConnectionLog{}).Where("user_id = ? AND disconnected_at IS NULL", c.userID).
+	result = ws.db.Model(&ConnectionLog{}).Where("user_id = ? AND disconnected_at IS NULL", c.userID).
 		Updates(map[string]interface{}{
 			"disconnected_at": &disconnectedAt,
 			"duration":        &duration,
 		})
+	if result.Error != nil {
+		log.Printf("[ERROR] Failed to update ConnectionLog for user %d: %v", c.userID, result.Error)
+	} else {
+		log.Printf("[DEBUG] Updated ConnectionLog (rows affected: %d) for user %d", result.RowsAffected, c.userID)
+	}
+
+	log.Printf("[DEBUG] Cleanup completed for user %d", c.userID)
 }
 
 func (c *Client) readPump(ws *WebSocketSvc) {
+	log.Printf("[DEBUG] Starting readPump for user %d", c.userID)
 	defer func() {
+		log.Printf("[DEBUG] readPump ending for user %d", c.userID)
 		ws.removeClient(c.userID)
 	}()
 
 	c.conn.SetReadLimit(maxMessageSize)
 	if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
-		log.Printf("Failed to set read deadline: %v", err)
+		log.Printf("[ERROR] Failed to set read deadline for user %d: %v", c.userID, err)
 		return
 	}
+	log.Printf("[DEBUG] Read deadline set for user %d", c.userID)
+
 	c.conn.SetPongHandler(func(string) error {
+		log.Printf("[DEBUG] Received pong from user %d", c.userID)
 		c.lastPong = time.Now()
 		if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
-			log.Printf("Failed to set read deadline: %v", err)
+			log.Printf("[ERROR] Failed to set read deadline in pong handler for user %d: %v", c.userID, err)
 			return err
 		}
 
@@ -277,24 +331,29 @@ func (c *Client) readPump(ws *WebSocketSvc) {
 	for {
 		select {
 		case <-c.ctx.Done():
+			log.Printf("[DEBUG] Context done in readPump for user %d", c.userID)
 			return
 		default:
 			_, message, err := c.conn.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-					log.Printf("WebSocket error for user %d: %v", c.userID, err)
+					log.Printf("[ERROR] WebSocket error for user %d: %v", c.userID, err)
+				} else {
+					log.Printf("[DEBUG] WebSocket closed normally for user %d: %v", c.userID, err)
 				}
 				return
 			}
 
-			log.Printf("Message from user %d (IP: %s): %s", c.userID, c.ip, string(message))
+			log.Printf("[INFO] Message from user %d (IP: %s): %s", c.userID, c.ip, string(message))
 		}
 	}
 }
 
 func (c *Client) writePump(ws *WebSocketSvc) {
+	log.Printf("[DEBUG] Starting writePump for user %d", c.userID)
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
+		log.Printf("[DEBUG] writePump ending for user %d", c.userID)
 		ticker.Stop()
 		c.conn.Close()
 	}()
@@ -302,39 +361,43 @@ func (c *Client) writePump(ws *WebSocketSvc) {
 	for {
 		select {
 		case <-c.ctx.Done():
+			log.Printf("[DEBUG] Context done in writePump for user %d", c.userID)
 			return
 		case message, ok := <-c.send:
 			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
-				log.Printf("Failed to set write deadline: %v", err)
+				log.Printf("[ERROR] Failed to set write deadline for user %d: %v", c.userID, err)
 				return
 			}
 			if !ok {
+				log.Printf("[DEBUG] Send channel closed, sending close message for user %d", c.userID)
 				if err := c.conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
-					log.Printf("Failed to write close message: %v", err)
+					log.Printf("[ERROR] Failed to write close message for user %d: %v", c.userID, err)
 				}
 				return
 			}
 
 			messageJSON, err := json.Marshal(message)
 			if err != nil {
-				log.Printf("Failed to marshal message for user %d: %v", c.userID, err)
+				log.Printf("[ERROR] Failed to marshal message for user %d: %v", c.userID, err)
 				continue
 			}
 
 			if err := c.conn.WriteMessage(websocket.TextMessage, messageJSON); err != nil {
-				log.Printf("Failed to write message to user %d: %v", c.userID, err)
+				log.Printf("[ERROR] Failed to write message to user %d: %v", c.userID, err)
 				return
 			}
+			log.Printf("[DEBUG] Successfully sent message to user %d: %s", c.userID, message.Type)
 
 		case <-ticker.C:
 			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
-				log.Printf("Failed to set write deadline: %v", err)
+				log.Printf("[ERROR] Failed to set write deadline for ping to user %d: %v", c.userID, err)
 				return
 			}
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				log.Printf("Failed to send ping to user %d: %v", c.userID, err)
+				log.Printf("[ERROR] Failed to send ping to user %d: %v", c.userID, err)
 				return
 			}
+			log.Printf("[DEBUG] Sent ping to user %d", c.userID)
 		}
 	}
 }
