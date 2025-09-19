@@ -16,7 +16,7 @@ import (
 
 type UserConnection struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
-	UserID      int       `gorm:"uniqueIndex;not null" json:"user_id"`
+	UserID      int       `gorm:"not null;index" json:"user_id"`
 	IP          string    `gorm:"size:45" json:"ip"`
 	ConnectedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"connected_at"`
 	LastPong    time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"last_pong"`

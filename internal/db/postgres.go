@@ -3,6 +3,7 @@ package db
 import (
 	"log"
 	"mride-backend/internal/models"
+	"mride-backend/internal/services"
 	"os"
 
 	"gorm.io/driver/postgres"
@@ -38,6 +39,8 @@ func New(dbUrl string) (*gorm.DB, error) {
 		&models.Ride{},
 		&models.RidePassenger{},
 		&models.Notification{},
+		&services.UserConnection{},
+		&services.ConnectionLog{},
 	)
 	if err != nil {
 		return nil, err
