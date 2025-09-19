@@ -152,29 +152,31 @@ func (ws *WebSocketSvc) HandleConnection(w http.ResponseWriter, r *http.Request,
 
 	log.Printf("[DEBUG] Creating/updating connection record for user %d", userID)
 
-	tx := ws.db.Begin()
+	var connectionID uint
+	err = ws.db.Raw(`
+		INSERT INTO user_connections (user_id, ip, connected_at, last_pong, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (user_id) 
+		DO UPDATE SET
+			ip = EXCLUDED.ip,
+			connected_at = EXCLUDED.connected_at,
+			last_pong = EXCLUDED.last_pong,
+			is_active = EXCLUDED.is_active,
+			updated_at = EXCLUDED.updated_at
+		RETURNING id`,
+		userConn.UserID, userConn.IP, userConn.ConnectedAt,
+		userConn.LastPong, userConn.IsActive, userConn.CreatedAt, userConn.UpdatedAt).
+		Scan(&connectionID).Error
 
-	if err := tx.Where("user_id = ?", userID).Delete(&UserConnection{}).Error; err != nil {
-		tx.Rollback()
-		log.Printf("[ERROR] Failed to delete existing connection for user %d: %v", userID, err)
+	if err != nil {
+		log.Printf("[ERROR] Failed to create/update user connection for user %d: %v", userID, err)
 		conn.Close()
 		return
 	}
 
-	if err := tx.Create(&userConn).Error; err != nil {
-		tx.Rollback()
-		log.Printf("[ERROR] Failed to create user connection for user %d: %v", userID, err)
-		conn.Close()
-		return
-	}
+	userConn.ID = connectionID
 
-	if err := tx.Commit().Error; err != nil {
-		log.Printf("[ERROR] Failed to commit transaction for user %d: %v", userID, err)
-		conn.Close()
-		return
-	}
-
-	connectionID := userConn.ID
+	connectionID = userConn.ID
 	log.Printf("[DEBUG] Created/updated user connection with ID: %d for user %d", connectionID, userID)
 
 	connLog := ConnectionLog{
