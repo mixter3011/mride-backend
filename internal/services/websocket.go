@@ -123,6 +123,24 @@ func (ws *WebSocketSvc) HandleConnection(w http.ResponseWriter, r *http.Request,
 	}
 	log.Printf("[DEBUG] WebSocket upgrade successful for user %d", userID)
 
+	tx := ws.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	log.Printf("[DEBUG] Deactivating existing connections for user %d", userID)
+	result := tx.Model(&UserConnection{}).Where("user_id = ? AND is_active = ?", userID, true).
+		Update("is_active", false)
+	if result.Error != nil {
+		log.Printf("[ERROR] Failed to deactivate existing connections for user %d: %v", userID, result.Error)
+		tx.Rollback()
+		conn.Close()
+		return
+	}
+	log.Printf("[DEBUG] Deactivated %d existing connections for user %d", result.RowsAffected, userID)
+
 	userConn := UserConnection{
 		UserID:      userID,
 		IP:          clientIP,
@@ -131,18 +149,10 @@ func (ws *WebSocketSvc) HandleConnection(w http.ResponseWriter, r *http.Request,
 		IsActive:    true,
 	}
 
-	log.Printf("[DEBUG] Deactivating existing connections for user %d", userID)
-	result := ws.db.Model(&UserConnection{}).Where("user_id = ? AND is_active = ?", userID, true).
-		Update("is_active", false)
-	if result.Error != nil {
-		log.Printf("[ERROR] Failed to deactivate existing connections for user %d: %v", userID, result.Error)
-	} else {
-		log.Printf("[DEBUG] Deactivated %d existing connections for user %d", result.RowsAffected, userID)
-	}
-
 	log.Printf("[DEBUG] Creating new connection record for user %d", userID)
-	if err := ws.db.Create(&userConn).Error; err != nil {
+	if err := tx.Create(&userConn).Error; err != nil {
 		log.Printf("[ERROR] Failed to create user connection record for user %d: %v", userID, err)
+		tx.Rollback()
 		conn.Close()
 		return
 	}
@@ -154,11 +164,18 @@ func (ws *WebSocketSvc) HandleConnection(w http.ResponseWriter, r *http.Request,
 		ConnectedAt: time.Now(),
 	}
 	log.Printf("[DEBUG] Creating connection log for user %d", userID)
-	if err := ws.db.Create(&connLog).Error; err != nil {
+	if err := tx.Create(&connLog).Error; err != nil {
 		log.Printf("[ERROR] Failed to create connection log for user %d: %v", userID, err)
 	} else {
 		log.Printf("[DEBUG] Created connection log with ID: %d for user %d", connLog.ID, userID)
 	}
+
+	if err := tx.Commit().Error; err != nil {
+		log.Printf("[ERROR] Failed to commit database transaction for user %d: %v", userID, err)
+		conn.Close()
+		return
+	}
+	log.Printf("[DEBUG] Database transaction committed successfully for user %d", userID)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	client := &Client{
