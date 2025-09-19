@@ -114,7 +114,6 @@ func (ws *WebSocketSvc) HandleConnection(w http.ResponseWriter, r *http.Request,
 		http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
-	log.Printf("[DEBUG] Rate limit check passed for IP %s", clientIP)
 
 	conn, err := ws.upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -123,73 +122,70 @@ func (ws *WebSocketSvc) HandleConnection(w http.ResponseWriter, r *http.Request,
 	}
 	log.Printf("[DEBUG] WebSocket upgrade successful for user %d", userID)
 
-	tx := ws.db.Begin()
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	log.Printf("[DEBUG] Deactivating existing connections for user %d", userID)
-	result := tx.Model(&UserConnection{}).Where("user_id = ? AND is_active = ?", userID, true).
-		Update("is_active", false)
-	if result.Error != nil {
-		log.Printf("[ERROR] Failed to deactivate existing connections for user %d: %v", userID, result.Error)
-		tx.Rollback()
-		conn.Close()
-		return
-	}
-	log.Printf("[DEBUG] Deactivated %d existing connections for user %d", result.RowsAffected, userID)
-
+	now := time.Now()
 	userConn := UserConnection{
 		UserID:      userID,
 		IP:          clientIP,
-		ConnectedAt: time.Now(),
-		LastPong:    time.Now(),
+		ConnectedAt: now,
+		LastPong:    now,
 		IsActive:    true,
+		UpdatedAt:   now,
 	}
 
-	log.Printf("[DEBUG] Creating new connection record for user %d", userID)
-	if err := tx.Create(&userConn).Error; err != nil {
-		log.Printf("[ERROR] Failed to create user connection record for user %d: %v", userID, err)
-		tx.Rollback()
+	log.Printf("[DEBUG] Upserting connection record for user %d", userID)
+
+	result := ws.db.Exec(`
+		INSERT INTO user_connections (user_id, ip, connected_at, last_pong, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (user_id) 
+		DO UPDATE SET 
+			ip = EXCLUDED.ip,
+			connected_at = EXCLUDED.connected_at,
+			last_pong = EXCLUDED.last_pong,
+			is_active = EXCLUDED.is_active,
+			updated_at = EXCLUDED.updated_at
+		RETURNING id
+	`, userID, clientIP, now, now, true, now, now)
+
+	if result.Error != nil {
+		log.Printf("[ERROR] Failed to upsert user connection for user %d: %v", userID, result.Error)
 		conn.Close()
 		return
 	}
-	log.Printf("[DEBUG] Created user connection record with ID: %d for user %d", userConn.ID, userID)
+
+	var connectionID uint
+	err = ws.db.Raw("SELECT id FROM user_connections WHERE user_id = ?", userID).Scan(&connectionID).Error
+	if err != nil {
+		log.Printf("[ERROR] Failed to get connection ID for user %d: %v", userID, err)
+		conn.Close()
+		return
+	}
+	userConn.ID = connectionID
+	log.Printf("[DEBUG] Upserted user connection with ID: %d for user %d", connectionID, userID)
 
 	connLog := ConnectionLog{
 		UserID:      userID,
 		IP:          clientIP,
-		ConnectedAt: time.Now(),
+		ConnectedAt: now,
 	}
-	log.Printf("[DEBUG] Creating connection log for user %d", userID)
-	if err := tx.Create(&connLog).Error; err != nil {
+	if err := ws.db.Create(&connLog).Error; err != nil {
 		log.Printf("[ERROR] Failed to create connection log for user %d: %v", userID, err)
 	} else {
-		log.Printf("[DEBUG] Created connection log with ID: %d for user %d", connLog.ID, userID)
+		log.Printf("[DEBUG] Created connection log for user %d", userID)
 	}
-
-	if err := tx.Commit().Error; err != nil {
-		log.Printf("[ERROR] Failed to commit database transaction for user %d: %v", userID, err)
-		conn.Close()
-		return
-	}
-	log.Printf("[DEBUG] Database transaction committed successfully for user %d", userID)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	client := &Client{
 		conn:         conn,
 		userID:       userID,
-		connectionID: userConn.ID,
+		connectionID: connectionID,
 		send:         make(chan WSMessage, 256),
 		ctx:          ctx,
 		cancel:       cancel,
-		lastPong:     time.Now(),
+		lastPong:     now,
 		ip:           clientIP,
-		connectedAt:  time.Now(),
+		connectedAt:  now,
 	}
-	log.Printf("[DEBUG] Created client struct for user %d", userID)
 
 	ws.clientsMux.Lock()
 	if existingClient, exists := ws.clients[userID]; exists {
@@ -198,7 +194,6 @@ func (ws *WebSocketSvc) HandleConnection(w http.ResponseWriter, r *http.Request,
 	}
 	ws.clients[userID] = client
 	ws.clientsMux.Unlock()
-	log.Printf("[DEBUG] Added client to clients map for user %d", userID)
 
 	log.Printf("[INFO] User %d connected via WebSocket from IP %s", userID, clientIP)
 
@@ -207,24 +202,21 @@ func (ws *WebSocketSvc) HandleConnection(w http.ResponseWriter, r *http.Request,
 		Message: "WebSocket connection established",
 		Data: map[string]interface{}{
 			"user_id":       userID,
-			"connection_id": userConn.ID,
-			"connected_at":  userConn.ConnectedAt,
+			"connection_id": connectionID,
+			"connected_at":  now,
 		},
 	}
-	log.Printf("[DEBUG] Prepared welcome message for user %d", userID)
 
-	log.Printf("[DEBUG] Attempting to send welcome message to user %d", userID)
 	select {
 	case client.send <- welcomeMsg:
-		log.Printf("[DEBUG] Welcome message queued successfully for user %d", userID)
+		log.Printf("[DEBUG] Welcome message queued for user %d", userID)
 	default:
-		log.Printf("[ERROR] Failed to queue welcome message for user %d - channel full or closed", userID)
+		log.Printf("[ERROR] Failed to queue welcome message for user %d", userID)
 		close(client.send)
 		ws.removeClient(userID)
 		return
 	}
 
-	log.Printf("[DEBUG] Starting read and write pumps for user %d", userID)
 	go client.writePump(ws)
 	go client.readPump(ws)
 	log.Printf("[DEBUG] Started goroutines for user %d", userID)
