@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type UserConnection struct {
@@ -150,24 +151,21 @@ func (ws *WebSocketSvc) HandleConnection(w http.ResponseWriter, r *http.Request,
 		UpdatedAt:   now,
 	}
 
-	log.Printf("[DEBUG] Creating connection record for user %d", userID)
+	log.Printf("[DEBUG] Creating/updating connection record for user %d", userID)
 
-	result := ws.db.Model(&UserConnection{}).
-		Where("user_id = ? AND is_active = ?", userID, true).
-		Update("is_active", false)
+	err = ws.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"ip", "connected_at", "last_pong", "is_active", "updated_at"}),
+	}).Create(&userConn).Error
 
-	if result.Error != nil {
-		log.Printf("[ERROR] Failed to deactivate existing connections for user %d: %v", userID, result.Error)
-	}
-
-	if err := ws.db.Create(&userConn).Error; err != nil {
-		log.Printf("[ERROR] Failed to create user connection for user %d: %v", userID, err)
+	if err != nil {
+		log.Printf("[ERROR] Failed to create/update user connection for user %d: %v", userID, err)
 		conn.Close()
 		return
 	}
 
 	connectionID := userConn.ID
-	log.Printf("[DEBUG] Created user connection with ID: %d for user %d", connectionID, userID)
+	log.Printf("[DEBUG] Created/updated user connection with ID: %d for user %d", connectionID, userID)
 
 	connLog := ConnectionLog{
 		UserID:      userID,
