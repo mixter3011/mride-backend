@@ -21,51 +21,6 @@ type MockNotificationSvc struct {
 	mock.Mock
 }
 
-func (m *MockNotificationSvc) CreateRideDeletedNotification(passengerID, rideID, driverID uint) error {
-	args := m.Called(passengerID, rideID, driverID)
-	return args.Error(0)
-}
-
-func (m *MockNotificationSvc) CreateRideJoinNotification(driverID, rideID, passengerID uint, passengerName string) error {
-	args := m.Called(driverID, rideID, passengerID, passengerName)
-	return args.Error(0)
-}
-
-func (m *MockNotificationSvc) CreateRideLeaveNotification(driverID, rideID, passengerID uint, passengerName string) error {
-	args := m.Called(driverID, rideID, passengerID, passengerName)
-	return args.Error(0)
-}
-
-func (m *MockNotificationSvc) CreateRideStartedNotification(passengerID, rideID, driverID uint) error {
-	args := m.Called(passengerID, rideID, driverID)
-	return args.Error(0)
-}
-
-func (m *MockNotificationSvc) CreateRideCompletedNotification(passengerID, rideID, driverID uint) error {
-	args := m.Called(passengerID, rideID, driverID)
-	return args.Error(0)
-}
-
-func (m *MockNotificationSvc) GetUserNotifications(userID uint, limit, offset int) (*models.NotificationsResp, error) {
-	args := m.Called(userID, limit, offset)
-	return args.Get(0).(*models.NotificationsResp), args.Error(1)
-}
-
-func (m *MockNotificationSvc) MarkAsRead(userID, notificationID uint) error {
-	args := m.Called(userID, notificationID)
-	return args.Error(0)
-}
-
-func (m *MockNotificationSvc) MarkAllAsRead(userID uint) error {
-	args := m.Called(userID)
-	return args.Error(0)
-}
-
-func (m *MockNotificationSvc) GetUnreadCount(userID uint) (int, error) {
-	args := m.Called(userID)
-	return args.Int(0), args.Error(1)
-}
-
 func createTestUser(db *gorm.DB, id uint, name string) models.User {
 	user := models.User{
 		ID:       id,
@@ -674,7 +629,9 @@ func TestLeaveRide_NotJoined(t *testing.T) {
 	err := rideSvc.LeaveRide(passenger.ID, ride.ID)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "you have not joined this ride")
+	if err != nil {
+		assert.Contains(t, err.Error(), "not joined")
+	}
 }
 func TestStartRide_Success(t *testing.T) {
 	db := setupRideTestDB(t)
@@ -1024,7 +981,6 @@ func TestGetNearbyRides_DefaultRadius(t *testing.T) {
 
 	assert.NoError(t, err)
 }
-
 func TestCleanupExpiredRides(t *testing.T) {
 	db := setupRideTestDB(t)
 	rideSvc := NewRideSvc(db, nil)

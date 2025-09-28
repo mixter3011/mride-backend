@@ -63,7 +63,6 @@ func TestWebSocketSvc_SendToUser(t *testing.T) {
 	assert.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	client := &Client{
 		userID:   1,
@@ -84,6 +83,9 @@ func TestWebSocketSvc_SendToUser(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Message not received")
 	}
+
+	cancel()
+	close(client.send)
 }
 
 func TestWebSocketSvc_GetOnlineUsers(t *testing.T) {
@@ -264,6 +266,8 @@ func TestWebSocketSvc_Shutdown(t *testing.T) {
 	db := setupWebSocketTestDB(t)
 	ws := NewWebSocketSvc(db)
 
+	clients := make([]*Client, 3)
+
 	for i := 1; i <= 3; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
 		client := &Client{
@@ -275,6 +279,7 @@ func TestWebSocketSvc_Shutdown(t *testing.T) {
 			connectedAt:  time.Now(),
 		}
 		ws.clients[i] = client
+		clients[i-1] = client
 	}
 
 	for i := 1; i <= 3; i++ {
@@ -291,6 +296,14 @@ func TestWebSocketSvc_Shutdown(t *testing.T) {
 	var activeCount int64
 	db.Model(&UserConnection{}).Where("is_active = ?", true).Count(&activeCount)
 	assert.Equal(t, int64(0), activeCount)
+
+	for _, client := range clients {
+		select {
+		case <-client.ctx.Done():
+		case <-time.After(100 * time.Millisecond):
+			t.Error("Client context was not properly cancelled")
+		}
+	}
 }
 
 func TestWebSocketSvc_CheckRateLimit(t *testing.T) {

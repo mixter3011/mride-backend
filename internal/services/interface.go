@@ -1,6 +1,9 @@
 package services
 
-import "mride-backend/internal/models"
+import (
+	"mride-backend/internal/models"
+	"time"
+)
 
 type OTPService interface {
 	GenCode() string
@@ -19,6 +22,11 @@ type NotificationSvcInterface interface {
 	CreateRideLeaveNotification(driverID, rideID, passengerID uint, passengerName string) error
 	CreateRideStartedNotification(passengerID, rideID, driverID uint) error
 	CreateRideCompletedNotification(passengerID, rideID, driverID uint) error
+	CreateSubscriptionJoinNotification(ownerID, subscriptionID, subscriberID uint, subscriberName string) error
+	CreateSubscriptionLeaveNotification(ownerID, subscriptionID, subscriberID uint, subscriberName string) error
+	CreateSubscriptionDeletedNotification(subscriberID, subscriptionID, ownerID uint) error
+	CreateSubscriptionRideNotification(subscriberID, subscriptionID, driverID uint, departureTime time.Time) error
+	CreateSubscriptionUpdatedNotification(subscriptionID, ownerID uint) error
 	GetUserNotifications(userID uint, limit, offset int) (*models.NotificationsResp, error)
 	MarkAsRead(userID, notificationID uint) error
 	MarkAllAsRead(userID uint) error

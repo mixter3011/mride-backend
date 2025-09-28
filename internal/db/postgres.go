@@ -44,6 +44,9 @@ func New(dbUrl string) (*gorm.DB, error) {
 		&models.Ride{},
 		&models.RidePassenger{},
 		&models.Notification{},
+		&models.RideSubscription{},
+		&models.SubscriptionSubscriber{},
+		&models.SubscriptionNotification{},
 		&services.UserConnection{},
 		&services.ConnectionLog{},
 	)
@@ -53,6 +56,9 @@ func New(dbUrl string) (*gorm.DB, error) {
 	}
 
 	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_fcm_tokens_user_device ON user_fcm_tokens(user_id, device_id)")
+
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_ride_subscriptions_recurring_days ON ride_subscriptions USING gin(recurring_days)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_subscription_subscribers_unique ON subscription_subscribers(subscription_id, subscriber_id) WHERE status = 'active'")
 
 	if !db.Migrator().HasTable(&services.UserConnection{}) {
 		log.Println("ERROR: user_connections table was not created")

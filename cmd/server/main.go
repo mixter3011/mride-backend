@@ -51,15 +51,28 @@ func main() {
 	notificationSvc := services.NewNotificationSvc(database, webSocketSvc)
 	rideSvc := services.NewRideSvc(database, notificationSvc)
 
+	subscriptionSvc := services.NewSubscriptionSvc(database, notificationSvc)
+	fmt.Println("Subscription service created")
+
+	// // Initialize cron scheduler for automatic notifications
+	// cronScheduler := services.NewCronScheduler(subscriptionSvc, rideSvc)
+	// if err := cronScheduler.Start(); err != nil {
+	// 	log.Printf("Warning: Failed to start cron scheduler: %v", err)
+	// }
+	// defer cronScheduler.Stop()
+
 	if err := rideSvc.CleanupExpiredRides(); err != nil {
 		log.Printf("Warning: Failed to cleanup expired rides: %v", err)
 	}
 
+	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authSvc, otpSvc)
 	fmt.Println("Creating handlers...")
 	otpHandler := handlers.NewOTPHandler(otpSvc, authSvc)
 	fmt.Println("OTP handler created")
 	rideHandler := handlers.NewRideHandler(rideSvc)
+	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionSvc)
+	fmt.Println("Subscription handler created")
 	notificationHandler := handlers.NewNotificationHandler(notificationSvc)
 	webSocketHandler := handlers.NewWebSocketHandler(webSocketSvc, jwtSvc)
 
@@ -101,7 +114,6 @@ func main() {
 	protected := r.Group("/", middleware.AuthMiddleware(jwtSvc))
 	{
 		protected.POST("/auth/logout", authHandler.Logout)
-
 		protected.POST("/auth/send-otp", otpHandler.SendOTP)
 		protected.POST("/auth/verify-otp", otpHandler.VerifyOTP)
 		protected.POST("/auth/send-email-otp", otpHandler.SendEmailOTP)
@@ -126,6 +138,22 @@ func main() {
 		protected.POST("/ride/:id/complete", rideHandler.CompleteRide)
 		protected.GET("/ride/:id/progress", rideHandler.GetRideProgress)
 		protected.GET("/rides/active", rideHandler.GetActiveRides)
+
+		protected.POST("/subscription/create", subscriptionHandler.CreateSubscription)
+		protected.GET("/subscription/:id", subscriptionHandler.GetSubscription)
+		protected.PUT("/subscription/:id", subscriptionHandler.UpdateSubscription)
+		protected.DELETE("/subscription/:id", subscriptionHandler.DeleteSubscription)
+		protected.POST("/subscription/:id/subscribe", subscriptionHandler.SubscribeToRide)
+		protected.DELETE("/subscription/:id/unsubscribe", subscriptionHandler.UnsubscribeFromRide)
+		protected.GET("/subscriptions/my", subscriptionHandler.GetMySubscriptions)
+		protected.GET("/subscriptions/subscribed", subscriptionHandler.GetMySubscribedRides)
+		protected.GET("/subscriptions/search", subscriptionHandler.SearchSubscriptions)
+		protected.GET("/subscriptions/nearby", subscriptionHandler.GetNearbySubscriptions)
+		protected.GET("/subscriptions/all", subscriptionHandler.GetAllSubscriptions)
+		protected.GET("/subscriptions/stats", subscriptionHandler.GetSubscriptionStats)
+		protected.POST("/subscription/:id/notifications/toggle", subscriptionHandler.ToggleNotifications)
+
+		protected.POST("/admin/notifications/send-daily", subscriptionHandler.SendDailyNotifications)
 
 		protected.GET("/notifications", notificationHandler.GetNotifications)
 		protected.PUT("/notifications/:id/read", notificationHandler.MarkAsRead)

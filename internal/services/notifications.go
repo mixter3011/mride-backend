@@ -3,6 +3,8 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"time"
 
 	"mride-backend/internal/models"
 
@@ -194,6 +196,95 @@ func (n *NotificationSvc) GetUnreadCount(userID uint) (int, error) {
 		Where("user_id = ? AND read = ?", userID, false).
 		Count(&count).Error
 	return int(count), err
+}
+
+func (n *NotificationSvc) CreateSubscriptionJoinNotification(ownerID, subscriptionID, subscriberID uint, subscriberName string) error {
+	data := models.NotificationData{
+		RideID:     subscriptionID,
+		UserID:     subscriberID,
+		UserName:   subscriberName,
+		ActionType: "subscribe",
+	}
+	return n.createAndSendNotification(ownerID, "subscription_join", "New Subscriber",
+		fmt.Sprintf("%s has subscribed to your ride", subscriberName), data)
+}
+
+func (n *NotificationSvc) CreateSubscriptionLeaveNotification(ownerID, subscriptionID, subscriberID uint, subscriberName string) error {
+	data := models.NotificationData{
+		RideID:     subscriptionID,
+		UserID:     subscriberID,
+		UserName:   subscriberName,
+		ActionType: "unsubscribe",
+	}
+	return n.createAndSendNotification(ownerID, "subscription_leave", "Subscriber Left",
+		fmt.Sprintf("%s has unsubscribed from your ride", subscriberName), data)
+}
+
+func (n *NotificationSvc) CreateSubscriptionDeletedNotification(subscriberID, subscriptionID, ownerID uint) error {
+	var subscription models.RideSubscription
+	message := "A ride subscription has been cancelled by the driver"
+	if err := n.db.First(&subscription, subscriptionID).Error; err == nil {
+		message = fmt.Sprintf("The ride subscription from %s to %s has been cancelled",
+			subscription.FromLocation, subscription.ToLocation)
+	}
+
+	data := models.NotificationData{
+		RideID:     subscriptionID,
+		UserID:     ownerID,
+		UserName:   "Driver",
+		ActionType: "deleted",
+	}
+	return n.createAndSendNotification(subscriberID, "subscription_deleted", "Subscription Cancelled", message, data)
+}
+
+func (n *NotificationSvc) CreateSubscriptionRideNotification(subscriberID, subscriptionID, driverID uint, departureTime time.Time) error {
+	var subscription models.RideSubscription
+	var driverName string = "Driver"
+
+	if err := n.db.Preload("User").First(&subscription, subscriptionID).Error; err == nil {
+		driverName = subscription.User.FullName
+	}
+
+	timeStr := departureTime.Format("3:04 PM")
+	message := fmt.Sprintf("Your subscribed ride from %s to %s departs at %s today",
+		subscription.FromLocation, subscription.ToLocation, timeStr)
+
+	data := models.NotificationData{
+		RideID:     subscriptionID,
+		UserID:     driverID,
+		UserName:   driverName,
+		ActionType: "ride_reminder",
+	}
+	return n.createAndSendNotification(subscriberID, "subscription_ride_reminder", "Ride Reminder", message, data)
+}
+
+func (n *NotificationSvc) CreateSubscriptionUpdatedNotification(subscriptionID, ownerID uint) error {
+	var subscription models.RideSubscription
+	if err := n.db.First(&subscription, subscriptionID).Error; err != nil {
+		return err
+	}
+
+	var subscribers []models.SubscriptionSubscriber
+	if err := n.db.Where("subscription_id = ? AND status = ?", subscriptionID, "active").Find(&subscribers).Error; err != nil {
+		return err
+	}
+
+	for _, subscriber := range subscribers {
+		data := models.NotificationData{
+			RideID:     subscriptionID,
+			UserID:     ownerID,
+			UserName:   "Driver",
+			ActionType: "updated",
+		}
+		message := fmt.Sprintf("The ride subscription from %s to %s has been updated",
+			subscription.FromLocation, subscription.ToLocation)
+
+		if err := n.createAndSendNotification(subscriber.SubscriberID, "subscription_updated",
+			"Subscription Updated", message, data); err != nil {
+			log.Printf("Failed to create subscription updated notification: %v", err)
+		}
+	}
+	return nil
 }
 
 var _ NotificationSvcInterface = (*NotificationSvc)(nil)
