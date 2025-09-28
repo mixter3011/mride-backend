@@ -20,7 +20,7 @@ type RideSubscription struct {
 	ToLatitude       float64    `json:"to_latitude" gorm:"not null"`
 	ToLongitude      float64    `json:"to_longitude" gorm:"not null"`
 	DepartureTime    string     `json:"departure_time" gorm:"size:5;not null"`
-	RecurringDays    string     `json:"recurring_days" gorm:"size:20;not null"`
+	RecurringDays    string     `json:"recurring_days" gorm:"size:255;not null"`
 	StartDate        time.Time  `json:"start_date" gorm:"not null"`
 	EndDate          *time.Time `json:"end_date,omitempty"`
 	Status           string     `json:"status" gorm:"size:20;default:'active';index"`
