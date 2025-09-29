@@ -100,6 +100,10 @@ func (r *RideSvc) DeleteRide(userID, rideID uint) error {
 	}
 
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("ride_id = ?", rideID).Delete(&models.RideChat{}).Error; err != nil {
+			return err
+		}
+
 		if err := tx.Where("ride_id = ?", rideID).Delete(&models.RidePassenger{}).Error; err != nil {
 			return err
 		}
@@ -551,6 +555,10 @@ func (r *RideSvc) CompleteRide(userID, rideID uint) error {
 	now := time.Now()
 
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("ride_id = ?", rideID).Delete(&models.RideChat{}).Error; err != nil {
+			return err
+		}
+
 		if err := tx.Model(&ride).Updates(map[string]interface{}{
 			"status":       "completed",
 			"completed_at": &now,
