@@ -27,7 +27,7 @@ func NewChatHandler(chatSvc ChatService) *ChatHandler {
 }
 
 func (h *ChatHandler) SendMessage(c *gin.Context) {
-	rideIDStr := c.Param("ride_id")
+	rideIDStr := c.Param("id")
 	rideID, err := strconv.Atoi(rideIDStr)
 	if err != nil {
 		utils.ErrJSON(c, http.StatusBadRequest, "Invalid ride ID")
@@ -56,7 +56,7 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 }
 
 func (h *ChatHandler) GetChatHistory(c *gin.Context) {
-	rideIDStr := c.Param("ride_id")
+	rideIDStr := c.Param("id")
 	rideID, err := strconv.Atoi(rideIDStr)
 	if err != nil {
 		utils.ErrJSON(c, http.StatusBadRequest, "Invalid ride ID")
