@@ -60,7 +60,7 @@ func setupRideTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err)
 
-	err = db.AutoMigrate(&models.User{}, &models.Ride{}, &models.RidePassenger{})
+	err = db.AutoMigrate(&models.User{}, &models.Ride{}, &models.RidePassenger{}, &models.RideChat{})
 	assert.NoError(t, err)
 
 	return db
