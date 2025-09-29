@@ -97,6 +97,11 @@ func (m *MockNotificationSvc) GetUserNotifications(userID uint, limit, offset in
 	return args.Get(0).(*models.NotificationsResp), args.Error(1)
 }
 
+func (m *MockNotificationSvc) CreateChatNotification(recipientID, rideID, senderID uint, senderName string) error {
+	args := m.Called(recipientID, rideID, senderID, senderName)
+	return args.Error(0)
+}
+
 func (m *MockNotificationSvc) MarkAsRead(userID, notificationID uint) error {
 	args := m.Called(userID, notificationID)
 	return args.Error(0)

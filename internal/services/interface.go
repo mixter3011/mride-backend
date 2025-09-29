@@ -22,6 +22,7 @@ type NotificationSvcInterface interface {
 	CreateRideLeaveNotification(driverID, rideID, passengerID uint, passengerName string) error
 	CreateRideStartedNotification(passengerID, rideID, driverID uint) error
 	CreateRideCompletedNotification(passengerID, rideID, driverID uint) error
+	CreateChatNotification(recipientID, rideID, senderID uint, senderName string) error
 	CreateSubscriptionJoinNotification(ownerID, subscriptionID, subscriberID uint, subscriberName string) error
 	CreateSubscriptionLeaveNotification(ownerID, subscriptionID, subscriberID uint, subscriberName string) error
 	CreateSubscriptionDeletedNotification(subscriberID, subscriptionID, ownerID uint) error

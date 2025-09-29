@@ -54,6 +54,9 @@ func main() {
 	subscriptionSvc := services.NewSubscriptionSvc(database, notificationSvc)
 	fmt.Println("Subscription service created")
 
+	chatSvc := services.NewChatSvc(database, webSocketSvc, notificationSvc)
+	fmt.Println("Chat service created")
+
 	// // Initialize cron scheduler for automatic notifications
 	// cronScheduler := services.NewCronScheduler(subscriptionSvc, rideSvc)
 	// if err := cronScheduler.Start(); err != nil {
@@ -75,6 +78,7 @@ func main() {
 	fmt.Println("Subscription handler created")
 	notificationHandler := handlers.NewNotificationHandler(notificationSvc)
 	webSocketHandler := handlers.NewWebSocketHandler(webSocketSvc, jwtSvc)
+	chatHandler := handlers.NewChatHandler(chatSvc)
 
 	r := gin.New()
 
@@ -138,6 +142,10 @@ func main() {
 		protected.POST("/ride/:id/complete", rideHandler.CompleteRide)
 		protected.GET("/ride/:id/progress", rideHandler.GetRideProgress)
 		protected.GET("/rides/active", rideHandler.GetActiveRides)
+
+		protected.POST("/ride/:ride_id/chat/send", chatHandler.SendMessage)
+		protected.GET("/ride/:ride_id/chat/history", chatHandler.GetChatHistory)
+		protected.GET("/chat/unread-count", chatHandler.GetUnreadCount)
 
 		protected.POST("/subscription/create", subscriptionHandler.CreateSubscription)
 		protected.GET("/subscription/:id", subscriptionHandler.GetSubscription)

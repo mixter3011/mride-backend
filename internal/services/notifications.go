@@ -287,4 +287,44 @@ func (n *NotificationSvc) CreateSubscriptionUpdatedNotification(subscriptionID, 
 	return nil
 }
 
+func (n *NotificationSvc) CreateChatNotification(recipientID, rideID, senderID uint, senderName string) error {
+	dataMap := map[string]interface{}{
+		"ride_id":     rideID,
+		"sender_id":   senderID,
+		"sender_name": senderName,
+	}
+
+	dataJSON, err := json.Marshal(dataMap)
+	if err != nil {
+		return err
+	}
+
+	notification := models.Notification{
+		UserID:  recipientID,
+		Type:    "chat_message",
+		Title:   "New Chat Message",
+		Message: fmt.Sprintf("%s sent you a message in ride #%d", senderName, rideID),
+		Data:    dataJSON,
+	}
+
+	if err := n.db.Create(&notification).Error; err != nil {
+		return err
+	}
+
+	if n.webSocketSvc != nil {
+		wsMessage := WSMessage{
+			Type:    "notification",
+			Title:   notification.Title,
+			Message: notification.Message,
+			Data:    dataMap,
+		}
+
+		if err := n.webSocketSvc.SendToUser(int(recipientID), wsMessage); err != nil {
+			log.Printf("Failed to send WebSocket notification: %v", err)
+		}
+	}
+
+	return nil
+}
+
 var _ NotificationSvcInterface = (*NotificationSvc)(nil)
