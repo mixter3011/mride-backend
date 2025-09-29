@@ -54,8 +54,8 @@ func setupChatTestRouter() (*gin.Engine, *MockChatService) {
 		c.Next()
 	})
 
-	router.POST("/ride/:ride_id/chat/send", chatHandler.SendMessage)
-	router.GET("/ride/:ride_id/chat/history", chatHandler.GetChatHistory)
+	router.POST("/ride/:id/chat/send", chatHandler.SendMessage)
+	router.GET("/ride/:id/chat/history", chatHandler.GetChatHistory)
 	router.GET("/chat/unread-count", chatHandler.GetUnreadCount)
 
 	return router, mockChatService
@@ -169,7 +169,7 @@ func TestChatHandler_SendMessage_Unauthenticated(t *testing.T) {
 	chatHandler := NewChatHandler(mockService)
 
 	router := gin.New()
-	router.POST("/ride/:ride_id/chat/send", chatHandler.SendMessage)
+	router.POST("/ride/:id/chat/send", chatHandler.SendMessage)
 
 	reqBody := models.SendChatMessageReq{Message: "Test"}
 	bodyBytes, _ := json.Marshal(reqBody)
@@ -298,7 +298,7 @@ func TestChatHandler_GetChatHistory_Unauthenticated(t *testing.T) {
 	chatHandler := NewChatHandler(mockService)
 
 	router := gin.New()
-	router.GET("/ride/:ride_id/chat/history", chatHandler.GetChatHistory)
+	router.GET("/ride/:id/chat/history", chatHandler.GetChatHistory)
 
 	req, _ := http.NewRequest("GET", "/ride/123/chat/history", nil)
 
