@@ -209,6 +209,7 @@ func (r *RideSvc) GetNearbyRides(userID uint, req models.NearbyRidesReq) ([]mode
 			Ride:           ride,
 			User:           ride.User,
 			AvailableSeats: ride.PassengerCount - int(joinedCount),
+			HasPassengers:  joinedCount > 0,
 		})
 	}
 
@@ -376,6 +377,7 @@ func (r *RideSvc) getCreatedRidesDetailed(userID uint) ([]models.RideResp, error
 			User:           ride.User,
 			JoinedUsers:    joinedUsers,
 			AvailableSeats: ride.PassengerCount - int(joinedCount),
+			HasPassengers:  joinedCount > 0,
 		})
 	}
 
@@ -403,6 +405,7 @@ func (r *RideSvc) getJoinedRidesDetailed(userID uint) ([]models.RideResp, error)
 			Ride:           ride,
 			User:           ride.User,
 			AvailableSeats: ride.PassengerCount - int(joinedCount),
+			HasPassengers:  joinedCount > 0,
 		})
 	}
 

@@ -64,6 +64,7 @@ type RideResp struct {
 	User           User   `json:"driver"`
 	JoinedUsers    []User `json:"joined_users,omitempty"`
 	AvailableSeats int    `json:"available_seats"`
+	HasPassengers  bool   `json:"has_passengers"`
 }
 type JoinedRidesResp struct {
 	CreatedRides []RideResp `json:"created_rides"`
