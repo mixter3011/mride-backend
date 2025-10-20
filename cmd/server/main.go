@@ -145,8 +145,11 @@ func main() {
 
 		protected.POST("/ride/:id/chat/send", chatHandler.SendMessage)
 		protected.GET("/ride/:id/chat/history", chatHandler.GetChatHistory)
-		protected.GET("/chat/unread-count", chatHandler.GetUnreadCount)
+		protected.GET("/ride/:id/chat/can-send", chatHandler.CheckCanSendMessage)
+		protected.GET("/chat/active", chatHandler.GetActiveChats)
+		protected.GET("/chat/expired", chatHandler.GetExpiredChats)
 		protected.GET("/chat/rides-with-chats", chatHandler.GetRidesWithChats)
+		protected.GET("/chat/unread-count", chatHandler.GetUnreadCount)
 
 		protected.POST("/subscription/create", subscriptionHandler.CreateSubscription)
 		protected.GET("/subscription/:id", subscriptionHandler.GetSubscription)
