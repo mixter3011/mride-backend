@@ -203,3 +203,69 @@ func (c *ChatSvc) DeleteChatHistory(rideID uint) error {
 func (c *ChatSvc) GetUnreadChatCount(userID uint) (int, error) {
 	return 0, nil
 }
+
+func (c *ChatSvc) HasChatMessages(rideID uint) (bool, error) {
+	var count int64
+	err := c.db.Model(&models.RideChat{}).Where("ride_id = ?", rideID).Count(&count).Error
+	return count > 0, err
+}
+
+func (c *ChatSvc) GetRidesWithChats(userID uint) ([]uint, error) {
+	var rideIDs []uint
+
+	var createdRides []models.Ride
+	if err := c.db.Select("id").Where("user_id = ?", userID).Find(&createdRides).Error; err == nil {
+		for _, ride := range createdRides {
+			var count int64
+			c.db.Model(&models.RideChat{}).
+				Where("ride_id = ? AND sender_id != ?", ride.ID, userID).
+				Count(&count)
+
+			if count > 0 {
+				rideIDs = append(rideIDs, ride.ID)
+			}
+		}
+	}
+
+	var passengerRides []models.RidePassenger
+	if err := c.db.Select("ride_id").
+		Where("passenger_id = ?", userID).
+		Find(&passengerRides).Error; err == nil {
+		for _, pr := range passengerRides {
+			var count int64
+			c.db.Model(&models.RideChat{}).
+				Where("ride_id = ?", pr.RideID).
+				Count(&count)
+
+			if count > 0 {
+				found := false
+				for _, id := range rideIDs {
+					if id == pr.RideID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					rideIDs = append(rideIDs, pr.RideID)
+				}
+			}
+		}
+	}
+
+	return rideIDs, nil
+}
+
+func (c *ChatSvc) GetFirstMessageSender(rideID uint) (*models.User, error) {
+	var firstChat models.RideChat
+	err := c.db.Where("ride_id = ?", rideID).
+		Order("created_at ASC").
+		First(&firstChat).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	var sender models.User
+	err = c.db.First(&sender, firstChat.SenderID).Error
+	return &sender, err
+}

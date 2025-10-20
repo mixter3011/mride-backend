@@ -14,10 +14,29 @@ type ChatService interface {
 	SendChatMessage(userID, rideID uint, message string) (*models.ChatMessageResp, error)
 	GetChatHistory(userID, rideID uint, limit, offset int) (*models.GetChatHistoryResp, error)
 	GetUnreadChatCount(userID uint) (int, error)
+	GetRidesWithChats(userID uint) ([]uint, error)
 }
 
 type ChatHandler struct {
 	chatSvc ChatService
+}
+
+func (h *ChatHandler) GetRidesWithChats(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	rideIDs, err := h.chatSvc.GetRidesWithChats(uint(userID.(int)))
+	if err != nil {
+		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to get rides with chats")
+		return
+	}
+
+	utils.SuccJSON(c, "Rides with chats retrieved successfully", map[string]interface{}{
+		"ride_ids": rideIDs,
+	})
 }
 
 func NewChatHandler(chatSvc ChatService) *ChatHandler {

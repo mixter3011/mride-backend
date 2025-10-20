@@ -20,6 +20,14 @@ type MockChatService struct {
 	mock.Mock
 }
 
+func (m *MockChatService) GetRidesWithChats(userID uint) ([]uint, error) {
+	args := m.Called(userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]uint), args.Error(1)
+}
+
 func (m *MockChatService) SendChatMessage(userID, rideID uint, message string) (*models.ChatMessageResp, error) {
 	args := m.Called(userID, rideID, message)
 	if args.Get(0) == nil {
@@ -414,4 +422,75 @@ func TestChatHandler_GetChatHistory_DefaultPagination(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	mockService.AssertExpectations(t)
+}
+
+func TestChatHandler_GetRidesWithChats_Success(t *testing.T) {
+	router, mockService := setupChatTestRouter()
+
+	userID := uint(1)
+	expectedRideIDs := []uint{101, 202, 303}
+
+	mockService.On("GetRidesWithChats", userID).Return(expectedRideIDs, nil)
+
+	router.GET("/chat/rides", NewChatHandler(mockService).GetRidesWithChats)
+
+	req, _ := http.NewRequest("GET", "/chat/rides", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "Rides with chats retrieved successfully", response["message"])
+
+	data := response["data"].(map[string]interface{})
+	rideIDs := data["ride_ids"].([]interface{})
+	assert.Len(t, rideIDs, len(expectedRideIDs))
+
+	mockService.AssertExpectations(t)
+}
+
+func TestChatHandler_GetRidesWithChats_ServiceError(t *testing.T) {
+	router, mockService := setupChatTestRouter()
+
+	userID := uint(1)
+
+	mockService.On("GetRidesWithChats", userID).Return(nil, errors.New("service error"))
+
+	router.GET("/chat/rides", NewChatHandler(mockService).GetRidesWithChats)
+
+	req, _ := http.NewRequest("GET", "/chat/rides", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "Failed to get rides with chats", response["error"])
+
+	mockService.AssertExpectations(t)
+}
+
+func TestChatHandler_GetRidesWithChats_Unauthenticated(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	mockService := new(MockChatService)
+	chatHandler := NewChatHandler(mockService)
+
+	router := gin.New()
+	router.GET("/chat/rides", chatHandler.GetRidesWithChats)
+
+	req, _ := http.NewRequest("GET", "/chat/rides", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "User not authenticated", response["error"])
 }
