@@ -9,6 +9,7 @@ import (
 	"mride-backend/internal/models"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -504,12 +505,15 @@ func TestSubscriptionSvc_SendDailyNotifications(t *testing.T) {
 	}
 	db.Create(&subscriptionSubscriber)
 
+	mockNotificationSvc.On("CreateSubscriptionRideNotification", subscriber.ID, subscription.ID, owner.ID, mock.AnythingOfType("time.Time")).Return(nil)
+
 	err := subscriptionSvc.SendDailyNotifications()
 	assert.NoError(t, err)
 
 	var notificationCount int64
 	db.Model(&models.SubscriptionNotification{}).Count(&notificationCount)
 
+	mockNotificationSvc.AssertExpectations(t)
 }
 
 func TestSubscriptionSvc_CreateSubscription_InvalidTimeFormat(t *testing.T) {
