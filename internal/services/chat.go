@@ -16,8 +16,8 @@ type ChatSvc struct {
 }
 
 func NewChatSvc(db *gorm.DB, webSocketSvc WebSocketInterface, notificationSvc NotificationSvcInterface) *ChatSvc {
-	if err := db.AutoMigrate(&models.RideChat{}); err != nil {
-		log.Printf("Failed to auto-migrate chat model: %v", err)
+	if err := db.AutoMigrate(&models.RideChat{}, &models.ChatReadStatus{}); err != nil {
+		log.Printf("Failed to auto-migrate chat models: %v", err)
 	}
 
 	return &ChatSvc{
@@ -63,6 +63,8 @@ func (c *ChatSvc) SendChatMessage(userID, rideID uint, message string) (*models.
 		return nil, err
 	}
 
+	c.updateReadStatus(userID, rideID, chatMessage.ID)
+
 	var sender models.User
 	if err := c.db.First(&sender, userID).Error; err != nil {
 		return nil, err
@@ -75,6 +77,7 @@ func (c *ChatSvc) SendChatMessage(userID, rideID uint, message string) (*models.
 		Message:   chatMessage.Message,
 		CreatedAt: chatMessage.CreatedAt,
 		IsMine:    true,
+		IsRead:    false,
 		Sender: struct {
 			ID       uint   `json:"id"`
 			FullName string `json:"full_name"`
@@ -113,8 +116,14 @@ func (c *ChatSvc) GetChatHistory(userID, rideID uint, limit, offset int) (*model
 		return nil, err
 	}
 
+	otherUserID := c.getOtherUserID(userID, rideID)
+	var readStatus models.ChatReadStatus
+	c.db.Where("ride_id = ? AND user_id = ?", rideID, otherUserID).First(&readStatus)
+
 	messages := make([]models.ChatMessageResp, len(chatMessages))
 	for i, msg := range chatMessages {
+		isRead := msg.SenderID == userID || msg.ID <= readStatus.LastReadMessageID
+
 		messages[i] = models.ChatMessageResp{
 			ID:        msg.ID,
 			RideID:    msg.RideID,
@@ -122,6 +131,7 @@ func (c *ChatSvc) GetChatHistory(userID, rideID uint, limit, offset int) (*model
 			Message:   msg.Message,
 			CreatedAt: msg.CreatedAt,
 			IsMine:    msg.SenderID == userID,
+			IsRead:    isRead,
 			Sender: struct {
 				ID       uint   `json:"id"`
 				FullName string `json:"full_name"`
@@ -141,6 +151,192 @@ func (c *ChatSvc) GetChatHistory(userID, rideID uint, limit, offset int) (*model
 		Messages: messages,
 		Count:    len(messages),
 	}, nil
+}
+
+func (c *ChatSvc) MarkChatAsRead(userID, rideID uint) error {
+	if !c.isUserPartOfRide(userID, rideID) {
+		return fmt.Errorf("you are not part of this ride")
+	}
+
+	var lastMessage models.RideChat
+	err := c.db.Where("ride_id = ?", rideID).Order("created_at DESC").First(&lastMessage).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	c.updateReadStatus(userID, rideID, lastMessage.ID)
+
+	if c.notificationSvc != nil {
+		c.notificationSvc.MarkAsRead(userID, rideID)
+	}
+
+	return nil
+}
+
+func (c *ChatSvc) updateReadStatus(userID, rideID, messageID uint) {
+	var readStatus models.ChatReadStatus
+	err := c.db.Where("ride_id = ? AND user_id = ?", rideID, userID).First(&readStatus).Error
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		readStatus = models.ChatReadStatus{
+			RideID:            rideID,
+			UserID:            userID,
+			LastReadMessageID: messageID,
+		}
+		c.db.Create(&readStatus)
+	} else if err == nil && messageID > readStatus.LastReadMessageID {
+		c.db.Model(&readStatus).Update("last_read_message_id", messageID)
+	}
+}
+
+func (c *ChatSvc) getOtherUserID(userID, rideID uint) uint {
+	var ride models.Ride
+	c.db.First(&ride, rideID)
+
+	if ride.UserID == userID {
+		var passenger models.RidePassenger
+		c.db.Where("ride_id = ? AND status = ?", rideID, "active").First(&passenger)
+		return passenger.PassengerID
+	}
+
+	return ride.UserID
+}
+
+func (c *ChatSvc) GetActiveRidesWithChats(userID uint) ([]models.ChatRoomInfo, error) {
+	var chatRooms []models.ChatRoomInfo
+
+	var createdRides []models.Ride
+	if err := c.db.Where("user_id = ? AND status IN ?", userID, []string{"active", "started"}).
+		Find(&createdRides).Error; err != nil {
+		return nil, err
+	}
+
+	for _, ride := range createdRides {
+		chatRoom := c.buildChatRoomInfo(userID, ride, true)
+		if chatRoom != nil {
+			chatRooms = append(chatRooms, *chatRoom)
+		}
+	}
+
+	var passengerRides []models.RidePassenger
+	if err := c.db.Preload("Ride").Preload("Ride.User").
+		Where("passenger_id = ? AND status = ?", userID, "active").
+		Find(&passengerRides).Error; err != nil {
+		return nil, err
+	}
+
+	for _, pr := range passengerRides {
+		if pr.Ride.Status != "active" && pr.Ride.Status != "started" {
+			continue
+		}
+
+		chatRoom := c.buildChatRoomInfo(userID, pr.Ride, false)
+		if chatRoom != nil {
+			chatRooms = append(chatRooms, *chatRoom)
+		}
+	}
+
+	return chatRooms, nil
+}
+
+func (c *ChatSvc) GetExpiredRidesWithChats(userID uint) ([]models.ChatRoomInfo, error) {
+	var chatRooms []models.ChatRoomInfo
+
+	var createdRides []models.Ride
+	if err := c.db.Where("user_id = ? AND status IN ?", userID, []string{"expired", "completed"}).
+		Find(&createdRides).Error; err != nil {
+		return nil, err
+	}
+
+	for _, ride := range createdRides {
+		chatRoom := c.buildChatRoomInfo(userID, ride, true)
+		if chatRoom != nil {
+			chatRooms = append(chatRooms, *chatRoom)
+		}
+	}
+
+	var passengerRides []models.RidePassenger
+	if err := c.db.Preload("Ride").Preload("Ride.User").
+		Where("passenger_id = ?", userID).
+		Find(&passengerRides).Error; err != nil {
+		return nil, err
+	}
+
+	for _, pr := range passengerRides {
+		if pr.Ride.Status != "expired" && pr.Ride.Status != "completed" {
+			continue
+		}
+
+		chatRoom := c.buildChatRoomInfo(userID, pr.Ride, false)
+		if chatRoom != nil {
+			chatRooms = append(chatRooms, *chatRoom)
+		}
+	}
+
+	return chatRooms, nil
+}
+
+func (c *ChatSvc) buildChatRoomInfo(userID uint, ride models.Ride, isDriver bool) *models.ChatRoomInfo {
+	var messageCount int64
+	c.db.Model(&models.RideChat{}).Where("ride_id = ?", ride.ID).Count(&messageCount)
+
+	if messageCount == 0 {
+		return nil
+	}
+
+	var lastMessage models.RideChat
+	c.db.Where("ride_id = ?", ride.ID).Order("created_at DESC").First(&lastMessage)
+
+	var otherUserID uint
+	var otherUserName string
+
+	if isDriver {
+		var targetPassenger models.RidePassenger
+		err := c.db.Preload("Passenger").
+			Where("ride_id = ? AND status = ?", ride.ID, "active").
+			First(&targetPassenger).Error
+
+		if err != nil {
+			return nil
+		}
+
+		otherUserID = targetPassenger.PassengerID
+		otherUserName = targetPassenger.Passenger.FullName
+	} else {
+		if ride.User.ID == 0 {
+			c.db.Preload("User").First(&ride, ride.ID)
+		}
+		otherUserID = ride.UserID
+		otherUserName = ride.User.FullName
+	}
+
+	var readStatus models.ChatReadStatus
+	c.db.Where("ride_id = ? AND user_id = ?", ride.ID, userID).First(&readStatus)
+
+	var unreadCount int64
+	c.db.Model(&models.RideChat{}).
+		Where("ride_id = ? AND sender_id = ? AND id > ?", ride.ID, otherUserID, readStatus.LastReadMessageID).
+		Count(&unreadCount)
+
+	lastMessageRead := lastMessage.SenderID != userID || lastMessage.ID <= readStatus.LastReadMessageID
+
+	return &models.ChatRoomInfo{
+		RideID:          ride.ID,
+		OtherUserID:     otherUserID,
+		OtherUserName:   otherUserName,
+		LastMessage:     lastMessage.Message,
+		LastMessageTime: lastMessage.CreatedAt,
+		LastMessageRead: lastMessageRead,
+		UnreadCount:     int(unreadCount),
+		RideStatus:      ride.Status,
+		FromLocation:    ride.FromLocation,
+		ToLocation:      ride.ToLocation,
+		DepartureTime:   ride.DepartureTime,
+		IsDriver:        isDriver,
+	}
 }
 
 func (c *ChatSvc) isUserPartOfRide(userID, rideID uint) bool {
@@ -207,6 +403,7 @@ func (c *ChatSvc) getRideParticipants(rideID uint) []uint {
 }
 
 func (c *ChatSvc) DeleteChatHistory(rideID uint) error {
+	c.db.Where("ride_id = ?", rideID).Delete(&models.ChatReadStatus{})
 	return c.db.Where("ride_id = ?", rideID).Delete(&models.RideChat{}).Error
 }
 
@@ -218,174 +415,6 @@ func (c *ChatSvc) HasChatMessages(rideID uint) (bool, error) {
 	var count int64
 	err := c.db.Model(&models.RideChat{}).Where("ride_id = ?", rideID).Count(&count).Error
 	return count > 0, err
-}
-
-func (c *ChatSvc) GetActiveRidesWithChats(userID uint) ([]models.ChatRoomInfo, error) {
-	var chatRooms []models.ChatRoomInfo
-
-	var createdRides []models.Ride
-	if err := c.db.Where("user_id = ? AND status IN ?", userID, []string{"active", "started"}).
-		Find(&createdRides).Error; err != nil {
-		return nil, err
-	}
-
-	for _, ride := range createdRides {
-		var messageCount int64
-		c.db.Model(&models.RideChat{}).Where("ride_id = ?", ride.ID).Count(&messageCount)
-
-		if messageCount > 0 {
-			var lastMessage models.RideChat
-			c.db.Where("ride_id = ?", ride.ID).Order("created_at DESC").First(&lastMessage)
-
-			var targetPassenger models.RidePassenger
-			err := c.db.Preload("Passenger").
-				Where("ride_id = ? AND passenger_id = ? AND status = ?", ride.ID, lastMessage.SenderID, "active").
-				First(&targetPassenger).Error
-
-			if err != nil {
-				err = c.db.Preload("Passenger").
-					Where("ride_id = ? AND status = ?", ride.ID, "active").
-					First(&targetPassenger).Error
-			}
-
-			if err == nil {
-				chatRooms = append(chatRooms, models.ChatRoomInfo{
-					RideID:          ride.ID,
-					OtherUserID:     targetPassenger.PassengerID,
-					OtherUserName:   targetPassenger.Passenger.FullName,
-					LastMessage:     lastMessage.Message,
-					LastMessageTime: lastMessage.CreatedAt,
-					UnreadCount:     0,
-					RideStatus:      ride.Status,
-					FromLocation:    ride.FromLocation,
-					ToLocation:      ride.ToLocation,
-					DepartureTime:   ride.DepartureTime,
-					IsDriver:        true,
-				})
-			}
-		}
-	}
-
-	var passengerRides []models.RidePassenger
-	if err := c.db.Preload("Ride").Preload("Ride.User").
-		Where("passenger_id = ? AND status = ?", userID, "active").
-		Find(&passengerRides).Error; err != nil {
-		return nil, err
-	}
-
-	for _, pr := range passengerRides {
-		if pr.Ride.Status != "active" && pr.Ride.Status != "started" {
-			continue
-		}
-
-		var messageCount int64
-		c.db.Model(&models.RideChat{}).Where("ride_id = ?", pr.RideID).Count(&messageCount)
-
-		if messageCount > 0 {
-			var lastMessage models.RideChat
-			c.db.Where("ride_id = ?", pr.RideID).Order("created_at DESC").First(&lastMessage)
-
-			chatRooms = append(chatRooms, models.ChatRoomInfo{
-				RideID:          pr.RideID,
-				OtherUserID:     pr.Ride.UserID,
-				OtherUserName:   pr.Ride.User.FullName,
-				LastMessage:     lastMessage.Message,
-				LastMessageTime: lastMessage.CreatedAt,
-				UnreadCount:     0,
-				RideStatus:      pr.Ride.Status,
-				FromLocation:    pr.Ride.FromLocation,
-				ToLocation:      pr.Ride.ToLocation,
-				DepartureTime:   pr.Ride.DepartureTime,
-				IsDriver:        false,
-			})
-		}
-	}
-
-	return chatRooms, nil
-}
-
-func (c *ChatSvc) GetExpiredRidesWithChats(userID uint) ([]models.ChatRoomInfo, error) {
-	var chatRooms []models.ChatRoomInfo
-
-	var createdRides []models.Ride
-	if err := c.db.Where("user_id = ? AND status IN ?", userID, []string{"expired", "completed"}).
-		Find(&createdRides).Error; err != nil {
-		return nil, err
-	}
-
-	for _, ride := range createdRides {
-		var messageCount int64
-		c.db.Model(&models.RideChat{}).Where("ride_id = ?", ride.ID).Count(&messageCount)
-
-		if messageCount > 0 {
-			var lastMessage models.RideChat
-			c.db.Where("ride_id = ?", ride.ID).Order("created_at DESC").First(&lastMessage)
-
-			var targetPassenger models.RidePassenger
-			err := c.db.Preload("Passenger").
-				Where("ride_id = ? AND passenger_id = ?", ride.ID, lastMessage.SenderID).
-				First(&targetPassenger).Error
-
-			if err != nil {
-				err = c.db.Preload("Passenger").
-					Where("ride_id = ?", ride.ID).
-					First(&targetPassenger).Error
-			}
-
-			if err == nil {
-				chatRooms = append(chatRooms, models.ChatRoomInfo{
-					RideID:          ride.ID,
-					OtherUserID:     targetPassenger.PassengerID,
-					OtherUserName:   targetPassenger.Passenger.FullName,
-					LastMessage:     lastMessage.Message,
-					LastMessageTime: lastMessage.CreatedAt,
-					UnreadCount:     0,
-					RideStatus:      ride.Status,
-					FromLocation:    ride.FromLocation,
-					ToLocation:      ride.ToLocation,
-					DepartureTime:   ride.DepartureTime,
-					IsDriver:        true,
-				})
-			}
-		}
-	}
-
-	var passengerRides []models.RidePassenger
-	if err := c.db.Preload("Ride").Preload("Ride.User").
-		Where("passenger_id = ?", userID).
-		Find(&passengerRides).Error; err != nil {
-		return nil, err
-	}
-
-	for _, pr := range passengerRides {
-		if pr.Ride.Status != "expired" && pr.Ride.Status != "completed" {
-			continue
-		}
-
-		var messageCount int64
-		c.db.Model(&models.RideChat{}).Where("ride_id = ?", pr.RideID).Count(&messageCount)
-
-		if messageCount > 0 {
-			var lastMessage models.RideChat
-			c.db.Where("ride_id = ?", pr.RideID).Order("created_at DESC").First(&lastMessage)
-
-			chatRooms = append(chatRooms, models.ChatRoomInfo{
-				RideID:          pr.RideID,
-				OtherUserID:     pr.Ride.UserID,
-				OtherUserName:   pr.Ride.User.FullName,
-				LastMessage:     lastMessage.Message,
-				LastMessageTime: lastMessage.CreatedAt,
-				UnreadCount:     0,
-				RideStatus:      pr.Ride.Status,
-				FromLocation:    pr.Ride.FromLocation,
-				ToLocation:      pr.Ride.ToLocation,
-				DepartureTime:   pr.Ride.DepartureTime,
-				IsDriver:        false,
-			})
-		}
-	}
-
-	return chatRooms, nil
 }
 
 func (c *ChatSvc) GetRidesWithChats(userID uint) ([]uint, error) {

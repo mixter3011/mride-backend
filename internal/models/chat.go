@@ -15,8 +15,21 @@ type RideChat struct {
 	Ride   Ride `gorm:"foreignKey:RideID" json:"ride,omitempty"`
 }
 
+// Track read status per user
+type ChatReadStatus struct {
+	ID                uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	RideID            uint      `gorm:"not null;index:idx_ride_user" json:"ride_id"`
+	UserID            uint      `gorm:"not null;index:idx_ride_user" json:"user_id"`
+	LastReadMessageID uint      `gorm:"not null" json:"last_read_message_id"`
+	UpdatedAt         time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
 func (RideChat) TableName() string {
 	return "ride_chats"
+}
+
+func (ChatReadStatus) TableName() string {
+	return "chat_read_statuses"
 }
 
 type SendChatMessageReq struct {
@@ -30,6 +43,7 @@ type ChatMessageResp struct {
 	Message   string    `json:"message"`
 	CreatedAt time.Time `json:"created_at"`
 	IsMine    bool      `json:"is_mine"`
+	IsRead    bool      `json:"is_read"`
 	Sender    struct {
 		ID       uint   `json:"id"`
 		FullName string `json:"full_name"`
@@ -47,6 +61,7 @@ type ChatRoomInfo struct {
 	OtherUserName   string    `json:"other_user_name"`
 	LastMessage     string    `json:"last_message"`
 	LastMessageTime time.Time `json:"last_message_time"`
+	LastMessageRead bool      `json:"last_message_read"`
 	UnreadCount     int       `json:"unread_count"`
 	RideStatus      string    `json:"ride_status"`
 	FromLocation    string    `json:"from_location"`

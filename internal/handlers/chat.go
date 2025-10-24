@@ -18,6 +18,7 @@ type ChatService interface {
 	GetActiveRidesWithChats(userID uint) ([]models.ChatRoomInfo, error)
 	GetExpiredRidesWithChats(userID uint) ([]models.ChatRoomInfo, error)
 	CanSendMessage(userID, rideID uint) (bool, string)
+	MarkChatAsRead(userID, rideID uint) error
 }
 
 type ChatHandler struct {
@@ -83,6 +84,29 @@ func (h *ChatHandler) GetChatHistory(c *gin.Context) {
 	}
 
 	utils.SuccJSON(c, "Chat history retrieved successfully", resp)
+}
+
+func (h *ChatHandler) MarkChatAsRead(c *gin.Context) {
+	rideIDStr := c.Param("id")
+	rideID, err := strconv.Atoi(rideIDStr)
+	if err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, "Invalid ride ID")
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrJSON(c, http.StatusUnauthorized, "User not authenticated")
+		return
+	}
+
+	err = h.chatSvc.MarkChatAsRead(uint(userID.(int)), uint(rideID))
+	if err != nil {
+		utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.SuccJSON(c, "Chat marked as read", nil)
 }
 
 func (h *ChatHandler) GetUnreadCount(c *gin.Context) {

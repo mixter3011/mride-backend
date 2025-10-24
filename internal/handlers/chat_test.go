@@ -20,6 +20,11 @@ type MockChatService struct {
 	mock.Mock
 }
 
+func (m *MockChatService) MarkChatAsRead(userID uint, rideID uint) error {
+	args := m.Called(userID, rideID)
+	return args.Error(0)
+}
+
 func (m *MockChatService) GetRidesWithChats(userID uint) ([]uint, error) {
 	args := m.Called(userID)
 	if args.Get(0) == nil {
@@ -90,6 +95,7 @@ func setupChatTestRouter() (*gin.Engine, *MockChatService) {
 	router.GET("/chat/active", chatHandler.GetActiveChats)
 	router.GET("/chat/expired", chatHandler.GetExpiredChats)
 	router.GET("/chat/rides", chatHandler.GetRidesWithChats)
+	router.POST("/ride/:id/chat/mark-read", chatHandler.MarkChatAsRead)
 
 	return router, mockChatService
 }
@@ -381,6 +387,28 @@ func TestChatHandler_GetRidesWithChats_Success(t *testing.T) {
 	data := response["data"].(map[string]interface{})
 	rideIDs := data["ride_ids"].([]interface{})
 	assert.Len(t, rideIDs, len(expectedRideIDs))
+
+	mockService.AssertExpectations(t)
+}
+
+func TestChatHandler_MarkChatAsRead_Success(t *testing.T) {
+	router, mockService := setupChatTestRouter()
+
+	userID := uint(1)
+	rideID := uint(123)
+
+	mockService.On("MarkChatAsRead", userID, rideID).Return(nil)
+
+	req, _ := http.NewRequest("POST", "/ride/123/chat/mark-read", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "Chat marked as read", response["message"])
 
 	mockService.AssertExpectations(t)
 }

@@ -150,6 +150,7 @@ func main() {
 		protected.GET("/chat/expired", chatHandler.GetExpiredChats)
 		protected.GET("/chat/rides-with-chats", chatHandler.GetRidesWithChats)
 		protected.GET("/chat/unread-count", chatHandler.GetUnreadCount)
+		protected.POST("/ride/:id/chat/mark-read", chatHandler.MarkChatAsRead)
 
 		protected.POST("/subscription/create", subscriptionHandler.CreateSubscription)
 		protected.GET("/subscription/:id", subscriptionHandler.GetSubscription)
