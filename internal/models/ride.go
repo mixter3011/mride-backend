@@ -52,6 +52,14 @@ type SearchRidesReq struct {
 	From string `form:"from"`
 	To   string `form:"to"`
 }
+
+type SearchByLocationReq struct {
+	FromLatitude  float64 `form:"from_lat" binding:"required"`
+	FromLongitude float64 `form:"from_lng" binding:"required"`
+	ToLatitude    float64 `form:"to_lat" binding:"required"`
+	ToLongitude   float64 `form:"to_lng" binding:"required"`
+	RadiusKM      float64 `form:"radius"`
+}
 type NearbyRidesReq struct {
 	FromLatitude  float64 `json:"from_latitude" binding:"required"`
 	FromLongitude float64 `json:"from_longitude" binding:"required"`

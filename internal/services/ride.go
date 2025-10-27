@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -152,13 +153,56 @@ func (r *RideSvc) GetRideByID(rideID uint) (*models.RideResp, error) {
 	}, nil
 }
 
-func (r *RideSvc) SearchRides(from, to string) ([]models.RideResp, error) {
+func (r *RideSvc) SearchRides(from, to string, req *models.SearchByLocationReq) ([]models.RideResp, error) {
+	now := time.Now()
 	var rides []models.Ride
-	err := r.db.Preload("User").
-		Where("status = ? AND departure_time > ? AND UPPER(from_location) LIKE UPPER(?) AND UPPER(to_location) LIKE UPPER(?)",
-			"active", time.Now(), "%"+from+"%", "%"+to+"%").
-		Find(&rides).Error
+	var err error
 
+	if req != nil && req.FromLatitude != 0 && req.ToLatitude != 0 {
+		if req.RadiusKM <= 0 {
+			req.RadiusKM = 5.0
+		}
+
+		err = r.db.Preload("User").
+			Where("departure_time >= ? AND status = ?", now, "active").
+			Order("departure_time ASC").
+			Find(&rides).Error
+		if err != nil {
+			return nil, err
+		}
+
+		var filteredRides []models.RideResp
+		for _, ride := range rides {
+			var joinedCount int64
+			r.db.Model(&models.RidePassenger{}).
+				Where("ride_id = ? AND status = ?", ride.ID, "active").
+				Count(&joinedCount)
+
+			fromDistance := r.calculateDistance(
+				req.FromLatitude, req.FromLongitude,
+				ride.FromLatitude, ride.FromLongitude,
+			)
+			toDistance := r.calculateDistance(
+				req.ToLatitude, req.ToLongitude,
+				ride.ToLatitude, ride.ToLongitude,
+			)
+
+			if fromDistance <= req.RadiusKM && toDistance <= req.RadiusKM {
+				filteredRides = append(filteredRides, models.RideResp{
+					Ride:           ride,
+					User:           ride.User,
+					AvailableSeats: ride.PassengerCount - int(joinedCount),
+					HasPassengers:  joinedCount > 0,
+				})
+			}
+		}
+		return filteredRides, nil
+	}
+
+	err = r.db.Preload("User").
+		Where("status = ? AND departure_time > ? AND UPPER(from_location) LIKE UPPER(?) AND UPPER(to_location) LIKE UPPER(?)",
+			"active", now, "%"+from+"%", "%"+to+"%").
+		Find(&rides).Error
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +210,9 @@ func (r *RideSvc) SearchRides(from, to string) ([]models.RideResp, error) {
 	var rideResponses []models.RideResp
 	for _, ride := range rides {
 		var joinedCount int64
-		r.db.Model(&models.RidePassenger{}).Where("ride_id = ? AND status = ?", ride.ID, "active").Count(&joinedCount)
+		r.db.Model(&models.RidePassenger{}).
+			Where("ride_id = ? AND status = ?", ride.ID, "active").
+			Count(&joinedCount)
 
 		rideResponses = append(rideResponses, models.RideResp{
 			Ride:           ride,
@@ -422,25 +468,23 @@ func (r *RideSvc) getJoinedUsers(rideID uint) ([]models.User, error) {
 }
 
 func (r *RideSvc) calculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
-	const earthRadius = 6371
+	const earthRadius = 6371.0
 
-	lat1Rad := lat1 * (3.14159265359 / 180)
-	lon1Rad := lon1 * (3.14159265359 / 180)
-	lat2Rad := lat2 * (3.14159265359 / 180)
-	lon2Rad := lon2 * (3.14159265359 / 180)
+	lat1Rad := lat1 * math.Pi / 180
+	lon1Rad := lon1 * math.Pi / 180
+	lat2Rad := lat2 * math.Pi / 180
+	lon2Rad := lon2 * math.Pi / 180
 
 	deltaLat := lat2Rad - lat1Rad
 	deltaLon := lon2Rad - lon1Rad
 
-	a := 0.5 - 0.5*((deltaLat*0.5)*(deltaLat*0.5)+(deltaLon*0.5)*(deltaLon*0.5))
-	if a < 0 {
-		a = 0
-	}
-	if a > 1 {
-		a = 1
-	}
+	a := math.Sin(deltaLat/2)*math.Sin(deltaLat/2) +
+		math.Cos(lat1Rad)*math.Cos(lat2Rad)*
+			math.Sin(deltaLon/2)*math.Sin(deltaLon/2)
 
-	return earthRadius * 2 * (a * a)
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+
+	return earthRadius * c
 }
 
 func (r *RideSvc) getCoordinates(address string) (float64, float64, error) {

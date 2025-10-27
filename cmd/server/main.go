@@ -57,7 +57,6 @@ func main() {
 	chatSvc := services.NewChatSvc(database, webSocketSvc, notificationSvc)
 	fmt.Println("Chat service created")
 
-	// // Initialize cron scheduler for automatic notifications
 	// cronScheduler := services.NewCronScheduler(subscriptionSvc, rideSvc)
 	// if err := cronScheduler.Start(); err != nil {
 	// 	log.Printf("Warning: Failed to start cron scheduler: %v", err)

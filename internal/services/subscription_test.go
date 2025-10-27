@@ -476,6 +476,9 @@ func TestSubscriptionSvc_SendDailyNotifications(t *testing.T) {
 	today := time.Now().UTC()
 	weekday := strings.ToLower(today.Weekday().String())
 
+	futureTime := today.Add(30 * time.Minute)
+	departureTimeStr := futureTime.Format("15:04")
+
 	subscription := models.RideSubscription{
 		UserID:           owner.ID,
 		Title:            "Test Subscription",
@@ -488,12 +491,12 @@ func TestSubscriptionSvc_SendDailyNotifications(t *testing.T) {
 		FromLongitude:    72.8777,
 		ToLatitude:       18.5204,
 		ToLongitude:      73.8567,
-		DepartureTime:    "18:00",
+		DepartureTime:    departureTimeStr,
 		RecurringDays:    `["` + weekday + `"]`,
 		StartDate:        today.Add(-24 * time.Hour),
 		Status:           "active",
 		MaxSubscribers:   4,
-		NotificationTime: 120,
+		NotificationTime: 60,
 	}
 	db.Create(&subscription)
 
@@ -512,6 +515,7 @@ func TestSubscriptionSvc_SendDailyNotifications(t *testing.T) {
 
 	var notificationCount int64
 	db.Model(&models.SubscriptionNotification{}).Count(&notificationCount)
+	assert.Equal(t, int64(1), notificationCount)
 
 	mockNotificationSvc.AssertExpectations(t)
 }

@@ -56,6 +56,42 @@ func createTestRide(db *gorm.DB, userID uint) models.Ride {
 	return ride
 }
 
+func TestSearchRidesByLocation_OutOfRadius(t *testing.T) {
+	db := setupRideTestDB(t)
+	rideSvc := NewRideSvc(db, nil)
+
+	driver := createTestUser(db, 1, "Driver")
+
+	ride := models.Ride{
+		UserID:         driver.ID,
+		CarNumber:      "ABC123",
+		CarModel:       "Honda Civic",
+		PassengerCount: 3,
+		FromLocation:   "Mumbai",
+		ToLocation:     "Pune",
+		FromLatitude:   19.0760,
+		FromLongitude:  72.8777,
+		ToLatitude:     18.5204,
+		ToLongitude:    73.8567,
+		DepartureTime:  time.Now().Add(2 * time.Hour),
+		Status:         "active",
+	}
+	db.Create(&ride)
+
+	req := &models.SearchByLocationReq{
+		FromLatitude:  28.7041,
+		FromLongitude: 77.1025,
+		ToLatitude:    28.4595,
+		ToLongitude:   77.0266,
+		RadiusKM:      5.0,
+	}
+
+	rides, err := rideSvc.SearchRides("", "", req)
+
+	assert.NoError(t, err)
+	assert.Empty(t, rides)
+}
+
 func setupRideTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err)
@@ -499,7 +535,7 @@ func TestSearchRides(t *testing.T) {
 	}
 	db.Create(&ride2)
 
-	rides, err := rideSvc.SearchRides("Mumbai", "Pune")
+	rides, err := rideSvc.SearchRides("Mumbai", "Pune", nil)
 
 	if err != nil && strings.Contains(err.Error(), "ILIKE") {
 		t.Skip("Skipping test - SQLite doesn't support ILIKE syntax")
@@ -510,6 +546,43 @@ func TestSearchRides(t *testing.T) {
 		assert.Contains(t, rides[0].Ride.FromLocation, "Mumbai")
 		assert.Contains(t, rides[0].Ride.ToLocation, "Pune")
 	}
+}
+
+func TestSearchRidesByLocation(t *testing.T) {
+	db := setupRideTestDB(t)
+	rideSvc := NewRideSvc(db, nil)
+
+	driver := createTestUser(db, 1, "Driver")
+
+	ride := models.Ride{
+		UserID:         driver.ID,
+		CarNumber:      "ABC123",
+		CarModel:       "Honda Civic",
+		PassengerCount: 3,
+		FromLocation:   "Mumbai",
+		ToLocation:     "Pune",
+		FromLatitude:   19.0760,
+		FromLongitude:  72.8777,
+		ToLatitude:     18.5204,
+		ToLongitude:    73.8567,
+		DepartureTime:  time.Now().Add(2 * time.Hour),
+		Status:         "active",
+	}
+	db.Create(&ride)
+
+	req := &models.SearchByLocationReq{
+		FromLatitude:  19.0800,
+		FromLongitude: 72.8800,
+		ToLatitude:    18.5200,
+		ToLongitude:   73.8600,
+		RadiusKM:      10.0,
+	}
+
+	rides, err := rideSvc.SearchRides("", "", req)
+
+	assert.NoError(t, err)
+	assert.Len(t, rides, 1)
+	assert.Equal(t, ride.ID, rides[0].Ride.ID)
 }
 func TestJoinRide_Success(t *testing.T) {
 	db := setupRideTestDB(t)

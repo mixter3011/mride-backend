@@ -55,8 +55,8 @@ func (m *MockRideService) GetRideByID(rideID uint) (*models.RideResp, error) {
 	return args.Get(0).(*models.RideResp), args.Error(1)
 }
 
-func (m *MockRideService) SearchRides(from, to string) ([]models.RideResp, error) {
-	args := m.Called(from, to)
+func (m *MockRideService) SearchRides(from, to string, locationReq *models.SearchByLocationReq) ([]models.RideResp, error) {
+	args := m.Called(from, to, locationReq)
 	return args.Get(0).([]models.RideResp), args.Error(1)
 }
 
@@ -307,9 +307,9 @@ func TestRideHandler_SearchRides(t *testing.T) {
 	router := setupRouter(handler)
 	router.GET("/rides/search", handler.SearchRides)
 
-	t.Run("Success", func(t *testing.T) {
+	t.Run("TextSearch_Success", func(t *testing.T) {
 		mockResp := []models.RideResp{}
-		mockSvc.On("SearchRides", "A", "B").Return(mockResp, nil)
+		mockSvc.On("SearchRides", "A", "B", (*models.SearchByLocationReq)(nil)).Return(mockResp, nil)
 
 		req, _ := http.NewRequest("GET", "/rides/search?from=A&to=B", nil)
 		w := httptest.NewRecorder()
@@ -318,8 +318,31 @@ func TestRideHandler_SearchRides(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 	})
 
+	t.Run("LocationSearch_Success", func(t *testing.T) {
+		mockResp := []models.RideResp{}
+		mockSvc.On("SearchRides", "", "", mock.MatchedBy(func(req *models.SearchByLocationReq) bool {
+			return req != nil && req.FromLatitude == 19.0760
+		})).Return(mockResp, nil)
+
+		url := "/rides/search?from_lat=19.0760&from_lng=72.8777&to_lat=18.5204&to_lng=73.8567&radius=5"
+		req, _ := http.NewRequest("GET", url, nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
 	t.Run("MissingParams", func(t *testing.T) {
 		req, _ := http.NewRequest("GET", "/rides/search", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("InvalidCoordinates", func(t *testing.T) {
+		url := "/rides/search?from_lat=100&from_lng=72.8777&to_lat=18.5204&to_lng=73.8567"
+		req, _ := http.NewRequest("GET", url, nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 

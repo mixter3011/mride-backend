@@ -15,7 +15,7 @@ type RideService interface {
 	DeleteRide(userID, rideID uint) error
 	GetAllUserRides(userID uint) ([]models.RideResp, error)
 	GetRideByID(rideID uint) (*models.RideResp, error)
-	SearchRides(from, to string) ([]models.RideResp, error)
+	SearchRides(from, to string, locationReq *models.SearchByLocationReq) ([]models.RideResp, error)
 	GetNearbyRides(userID uint, req models.NearbyRidesReq) ([]models.RideResp, error)
 	JoinRide(userID, rideID uint) error
 	LeaveRide(userID, rideID uint) error
@@ -122,12 +122,36 @@ func (h *RideHandler) SearchRides(c *gin.Context) {
 	from := c.Query("from")
 	to := c.Query("to")
 
-	if from == "" && to == "" {
-		utils.ErrJSON(c, http.StatusBadRequest, "At least one search parameter required")
-		return
+	fromLat := c.Query("from_lat")
+	toLat := c.Query("to_lat")
+
+	var rides []models.RideResp
+	var err error
+
+	if fromLat != "" && toLat != "" {
+		var req models.SearchByLocationReq
+		if err := c.ShouldBindQuery(&req); err != nil {
+			utils.ErrJSON(c, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if req.FromLatitude < -90 || req.FromLatitude > 90 ||
+			req.FromLongitude < -180 || req.FromLongitude > 180 ||
+			req.ToLatitude < -90 || req.ToLatitude > 90 ||
+			req.ToLongitude < -180 || req.ToLongitude > 180 {
+			utils.ErrJSON(c, http.StatusBadRequest, "Invalid coordinates")
+			return
+		}
+
+		rides, err = h.rideSvc.SearchRides("", "", &req)
+	} else {
+		if from == "" && to == "" {
+			utils.ErrJSON(c, http.StatusBadRequest, "At least one search parameter required")
+			return
+		}
+		rides, err = h.rideSvc.SearchRides(from, to, nil)
 	}
 
-	rides, err := h.rideSvc.SearchRides(from, to)
 	if err != nil {
 		utils.ErrJSON(c, http.StatusInternalServerError, "Failed to search rides")
 		return
