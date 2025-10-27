@@ -58,7 +58,7 @@ func createTestRide(db *gorm.DB, userID uint) models.Ride {
 
 func TestSearchRidesByLocation_OutOfRadius(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "Driver")
 
@@ -104,7 +104,7 @@ func setupRideTestDB(t *testing.T) *gorm.DB {
 
 func TestJoinRide_RideNotActive(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "Driver")
 	passenger := createTestUser(db, 2, "Passenger")
@@ -120,7 +120,7 @@ func TestJoinRide_RideNotActive(t *testing.T) {
 
 func TestStartRide_RideNotActive(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "Driver")
 	ride := createTestRide(db, driver.ID)
@@ -136,7 +136,7 @@ func TestStartRide_RideNotActive(t *testing.T) {
 
 func TestCompleteRide_AlreadyCompleted(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "Driver")
 	ride := createTestRide(db, driver.ID)
@@ -158,7 +158,7 @@ func TestCompleteRide_AlreadyCompleted(t *testing.T) {
 }
 func TestGetRideProgress_NoStartTime(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "Driver")
 	ride := createTestRide(db, driver.ID)
@@ -172,7 +172,7 @@ func TestGetRideProgress_NoStartTime(t *testing.T) {
 }
 func TestGetRideProgress_OverTime(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "Driver")
 	ride := createTestRide(db, driver.ID)
@@ -192,7 +192,7 @@ func TestGetRideProgress_OverTime(t *testing.T) {
 }
 func TestGetActiveRidesForUser_NoActiveRides(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	passenger := createTestUser(db, 1, "Passenger")
 
@@ -203,7 +203,7 @@ func TestGetActiveRidesForUser_NoActiveRides(t *testing.T) {
 }
 func TestGetActiveRidesForUser_CompletedRides(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "Driver")
 	passenger := createTestUser(db, 2, "Passenger")
@@ -225,7 +225,7 @@ func TestGetActiveRidesForUser_CompletedRides(t *testing.T) {
 }
 func TestDeleteRide_WithNilNotificationService(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	user := createTestUser(db, 1, "Driver")
 	passenger := createTestUser(db, 2, "Passenger")
@@ -244,7 +244,7 @@ func TestDeleteRide_WithNilNotificationService(t *testing.T) {
 }
 func TestJoinRide_WithNilNotificationService(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "Driver")
 	passenger := createTestUser(db, 2, "Passenger")
@@ -256,7 +256,7 @@ func TestJoinRide_WithNilNotificationService(t *testing.T) {
 }
 func TestStartRide_WithNilNotificationService(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "Driver")
 	ride := createTestRide(db, driver.ID)
@@ -269,7 +269,7 @@ func TestStartRide_WithNilNotificationService(t *testing.T) {
 }
 func TestCalculateDistance_SameLocation(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	distance := rideSvc.calculateDistance(19.0760, 72.8777, 19.0760, 72.8777)
 
@@ -293,7 +293,7 @@ func TestCalculateDistance_Mock(t *testing.T) {
 }
 func TestCalculateDistance_InvalidCoordinates(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	distance := rideSvc.calculateDistance(90, 180, -90, -180)
 
@@ -301,7 +301,7 @@ func TestCalculateDistance_InvalidCoordinates(t *testing.T) {
 }
 func TestCreateRide_WithValidPrice(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	user := createTestUser(db, 1, "Driver")
 
@@ -329,7 +329,7 @@ func TestCreateRide_WithValidPrice(t *testing.T) {
 }
 func TestCreateRide_GeolocationError(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	createTestUser(db, 1, "Driver")
 
@@ -346,14 +346,14 @@ func TestCreateRide_GeolocationError(t *testing.T) {
 func TestNewRideSvc(t *testing.T) {
 	db := setupRideTestDB(t)
 
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	assert.NotNil(t, rideSvc)
 	assert.Equal(t, db, rideSvc.db)
 }
 func TestCreateRide_Success(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	user := createTestUser(db, 1, "John Doe")
 
@@ -381,7 +381,7 @@ func TestCreateRide_Success(t *testing.T) {
 }
 func TestCreateRide_PastDepartureTime(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	req := models.CreateRideReq{
 		DepartureTime: time.Now().Add(-1 * time.Hour),
@@ -394,7 +394,7 @@ func TestCreateRide_PastDepartureTime(t *testing.T) {
 }
 func TestCreateRide_NegativePrice(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	negativePrice := float64(-100)
 	req := models.CreateRideReq{
@@ -409,7 +409,7 @@ func TestCreateRide_NegativePrice(t *testing.T) {
 }
 func TestDeleteRide_Success(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	user := createTestUser(db, 1, "John Doe")
 	passenger := createTestUser(db, 2, "Jane Doe")
@@ -436,7 +436,7 @@ func TestDeleteRide_Success(t *testing.T) {
 }
 func TestDeleteRide_NotOwner(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	user1 := createTestUser(db, 1, "John Doe")
 	user2 := createTestUser(db, 2, "Jane Doe")
@@ -449,7 +449,7 @@ func TestDeleteRide_NotOwner(t *testing.T) {
 }
 func TestDeleteRide_NotFound(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	err := rideSvc.DeleteRide(1, 999)
 
@@ -458,7 +458,7 @@ func TestDeleteRide_NotFound(t *testing.T) {
 }
 func TestGetRidesByUser(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	user := createTestUser(db, 1, "John Doe")
 	createTestRide(db, user.ID)
@@ -474,7 +474,7 @@ func TestGetRidesByUser(t *testing.T) {
 }
 func TestGetRideByID_Success(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	user := createTestUser(db, 1, "John Doe")
 	ride := createTestRide(db, user.ID)
@@ -489,7 +489,7 @@ func TestGetRideByID_Success(t *testing.T) {
 }
 func TestGetRideByID_WithPassengers(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	user := createTestUser(db, 1, "John Doe")
 	passenger := createTestUser(db, 2, "Jane Doe")
@@ -511,7 +511,7 @@ func TestGetRideByID_WithPassengers(t *testing.T) {
 }
 func TestSearchRides(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	user := createTestUser(db, 1, "John Doe")
 
@@ -550,7 +550,7 @@ func TestSearchRides(t *testing.T) {
 
 func TestSearchRidesByLocation(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "Driver")
 
@@ -586,7 +586,7 @@ func TestSearchRidesByLocation(t *testing.T) {
 }
 func TestJoinRide_Success(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "John Doe")
 	passenger := createTestUser(db, 2, "Jane Doe")
@@ -603,7 +603,7 @@ func TestJoinRide_Success(t *testing.T) {
 }
 func TestJoinRide_OwnRide(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	user := createTestUser(db, 1, "John Doe")
 	ride := createTestRide(db, user.ID)
@@ -615,7 +615,7 @@ func TestJoinRide_OwnRide(t *testing.T) {
 }
 func TestJoinRide_AlreadyJoined(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "John Doe")
 	passenger := createTestUser(db, 2, "Jane Doe")
@@ -635,7 +635,7 @@ func TestJoinRide_AlreadyJoined(t *testing.T) {
 }
 func TestJoinRide_NoAvailableSeats(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "John Doe")
 	ride := createTestRide(db, driver.ID)
@@ -658,7 +658,7 @@ func TestJoinRide_NoAvailableSeats(t *testing.T) {
 }
 func TestLeaveRide_Success(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "John Doe")
 	passenger := createTestUser(db, 2, "Jane Doe")
@@ -681,7 +681,7 @@ func TestLeaveRide_Success(t *testing.T) {
 }
 func TestLeaveRide_OwnRide(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	user := createTestUser(db, 1, "John Doe")
 	ride := createTestRide(db, user.ID)
@@ -693,7 +693,7 @@ func TestLeaveRide_OwnRide(t *testing.T) {
 }
 func TestLeaveRide_NotJoined(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "John Doe")
 	passenger := createTestUser(db, 2, "Jane Doe")
@@ -709,7 +709,7 @@ func TestLeaveRide_NotJoined(t *testing.T) {
 func TestStartRide_Success(t *testing.T) {
 	db := setupRideTestDB(t)
 	mockNotificationSvc := &MockNotificationSvc{}
-	rideSvc := NewRideSvc(db, mockNotificationSvc)
+	rideSvc := NewRideSvc(db, mockNotificationSvc, nil)
 
 	driver := createTestUser(db, 1, "John Doe")
 	passenger := createTestUser(db, 2, "Jane Doe")
@@ -742,7 +742,7 @@ func TestStartRide_Success(t *testing.T) {
 }
 func TestStartRide_NotOwner(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "John Doe")
 	otherUser := createTestUser(db, 2, "Jane Doe")
@@ -756,7 +756,7 @@ func TestStartRide_NotOwner(t *testing.T) {
 }
 func TestStartRide_AlreadyStarted(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "John Doe")
 	ride := createTestRide(db, driver.ID)
@@ -775,7 +775,7 @@ func TestStartRide_AlreadyStarted(t *testing.T) {
 func TestCompleteRide_Success(t *testing.T) {
 	db := setupRideTestDB(t)
 	mockNotificationSvc := &MockNotificationSvc{}
-	rideSvc := NewRideSvc(db, mockNotificationSvc)
+	rideSvc := NewRideSvc(db, mockNotificationSvc, nil)
 
 	driver := createTestUser(db, 1, "John Doe")
 	passenger := createTestUser(db, 2, "Jane Doe")
@@ -813,7 +813,7 @@ func TestCompleteRide_Success(t *testing.T) {
 }
 func TestCompleteRide_NotStarted(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "John Doe")
 	ride := createTestRide(db, driver.ID)
@@ -825,7 +825,7 @@ func TestCompleteRide_NotStarted(t *testing.T) {
 }
 func TestGetRideProgress_Success(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "John Doe")
 	ride := createTestRide(db, driver.ID)
@@ -849,7 +849,7 @@ func TestGetRideProgress_Success(t *testing.T) {
 }
 func TestGetRideProgress_NotStarted(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "John Doe")
 	ride := createTestRide(db, driver.ID)
@@ -861,7 +861,7 @@ func TestGetRideProgress_NotStarted(t *testing.T) {
 }
 func TestCalculateDistance(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	mumbaiLat, mumbaiLng := 19.0760, 72.8777
 	puneLat, puneLng := 18.5204, 73.8567
@@ -907,7 +907,7 @@ func TestGetCoordinates_Success(t *testing.T) {
 }
 func TestGetAllUserRides(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	user := createTestUser(db, 1, "John Doe")
 	driver := createTestUser(db, 2, "Jane Doe")
@@ -934,7 +934,7 @@ func TestGetAllUserRides(t *testing.T) {
 }
 func TestGetAllRides(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	user1 := createTestUser(db, 1, "John Doe")
 	user2 := createTestUser(db, 2, "Jane Doe")
@@ -953,7 +953,7 @@ func TestGetAllRides(t *testing.T) {
 }
 func TestGetActiveRidesForUser(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "Driver")
 	passenger := createTestUser(db, 2, "Passenger")
@@ -985,7 +985,7 @@ func TestGetActiveRidesForUser(t *testing.T) {
 }
 func TestGetNearbyRides(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "Driver")
 
@@ -1040,7 +1040,7 @@ func TestGetNearbyRides(t *testing.T) {
 }
 func TestGetNearbyRides_DefaultRadius(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	req := models.NearbyRidesReq{
 		FromLatitude:  19.0760,
@@ -1056,7 +1056,7 @@ func TestGetNearbyRides_DefaultRadius(t *testing.T) {
 }
 func TestCleanupExpiredRides(t *testing.T) {
 	db := setupRideTestDB(t)
-	rideSvc := NewRideSvc(db, nil)
+	rideSvc := NewRideSvc(db, nil, nil)
 
 	driver := createTestUser(db, 1, "Driver")
 

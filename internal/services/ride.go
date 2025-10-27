@@ -19,12 +19,14 @@ import (
 type RideSvc struct {
 	db              *gorm.DB
 	notificationSvc NotificationSvcInterface
+	webSocketSvc    WebSocketInterface
 }
 
-func NewRideSvc(db *gorm.DB, notificationSvc NotificationSvcInterface) *RideSvc {
+func NewRideSvc(db *gorm.DB, notificationSvc NotificationSvcInterface, webSocketSvc WebSocketInterface) *RideSvc {
 	return &RideSvc{
 		db:              db,
 		notificationSvc: notificationSvc,
+		webSocketSvc:    webSocketSvc,
 	}
 }
 
@@ -318,6 +320,26 @@ func (r *RideSvc) JoinRide(userID, rideID uint) error {
 			}
 		}
 
+		if r.webSocketSvc != nil {
+			wsMsg := WSMessage{
+				Type:    "chat_room_update",
+				Title:   "Chat Available",
+				Message: "New chat available",
+				Data: map[string]interface{}{
+					"ride_id": rideID,
+					"action":  "passenger_joined",
+				},
+			}
+
+			if err := r.webSocketSvc.SendToUser(int(ride.UserID), wsMsg); err != nil {
+				log.Printf("Failed to notify driver about new chat: %v", err)
+			}
+
+			if err := r.webSocketSvc.SendToUser(int(userID), wsMsg); err != nil {
+				log.Printf("Failed to notify passenger about new chat: %v", err)
+			}
+		}
+
 		return nil
 	})
 }
@@ -358,6 +380,26 @@ func (r *RideSvc) LeaveRide(userID, rideID uint) error {
 		if r.notificationSvc != nil {
 			if err := r.notificationSvc.CreateRideLeaveNotification(ride.UserID, rideID, userID, userName); err != nil {
 				log.Printf("Failed to create ride leave notification: %v", err)
+			}
+		}
+
+		if r.webSocketSvc != nil {
+			wsMsg := WSMessage{
+				Type:    "chat_room_update",
+				Title:   "Chat Removed",
+				Message: "Chat no longer available",
+				Data: map[string]interface{}{
+					"ride_id": rideID,
+					"action":  "passenger_left",
+				},
+			}
+
+			if err := r.webSocketSvc.SendToUser(int(ride.UserID), wsMsg); err != nil {
+				log.Printf("Failed to notify driver: %v", err)
+			}
+
+			if err := r.webSocketSvc.SendToUser(int(userID), wsMsg); err != nil {
+				log.Printf("Failed to notify passenger: %v", err)
 			}
 		}
 
