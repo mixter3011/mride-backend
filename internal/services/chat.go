@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"mride-backend/internal/models"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -283,13 +284,6 @@ func (c *ChatSvc) buildChatRoomInfo(userID uint, ride models.Ride, isDriver bool
 	var messageCount int64
 	c.db.Model(&models.RideChat{}).Where("ride_id = ?", ride.ID).Count(&messageCount)
 
-	if messageCount == 0 {
-		return nil
-	}
-
-	var lastMessage models.RideChat
-	c.db.Where("ride_id = ?", ride.ID).Order("created_at DESC").First(&lastMessage)
-
 	var otherUserID uint
 	var otherUserName string
 
@@ -313,22 +307,41 @@ func (c *ChatSvc) buildChatRoomInfo(userID uint, ride models.Ride, isDriver bool
 		otherUserName = ride.User.FullName
 	}
 
-	var readStatus models.ChatReadStatus
-	c.db.Where("ride_id = ? AND user_id = ?", ride.ID, userID).First(&readStatus)
-
+	var lastMessage string
+	var lastMessageTime time.Time
+	var lastMessageRead bool
 	var unreadCount int64
-	c.db.Model(&models.RideChat{}).
-		Where("ride_id = ? AND sender_id = ? AND id > ?", ride.ID, otherUserID, readStatus.LastReadMessageID).
-		Count(&unreadCount)
 
-	lastMessageRead := lastMessage.SenderID != userID || lastMessage.ID <= readStatus.LastReadMessageID
+	if messageCount == 0 {
+
+		lastMessage = "No messages yet"
+		lastMessageTime = ride.CreatedAt
+		lastMessageRead = true
+		unreadCount = 0
+	} else {
+
+		var lastMsg models.RideChat
+		c.db.Where("ride_id = ?", ride.ID).Order("created_at DESC").First(&lastMsg)
+
+		lastMessage = lastMsg.Message
+		lastMessageTime = lastMsg.CreatedAt
+
+		var readStatus models.ChatReadStatus
+		c.db.Where("ride_id = ? AND user_id = ?", ride.ID, userID).First(&readStatus)
+
+		lastMessageRead = lastMsg.SenderID == userID || lastMsg.ID <= readStatus.LastReadMessageID
+
+		c.db.Model(&models.RideChat{}).
+			Where("ride_id = ? AND sender_id = ? AND id > ?", ride.ID, otherUserID, readStatus.LastReadMessageID).
+			Count(&unreadCount)
+	}
 
 	return &models.ChatRoomInfo{
 		RideID:          ride.ID,
 		OtherUserID:     otherUserID,
 		OtherUserName:   otherUserName,
-		LastMessage:     lastMessage.Message,
-		LastMessageTime: lastMessage.CreatedAt,
+		LastMessage:     lastMessage,
+		LastMessageTime: lastMessageTime,
 		LastMessageRead: lastMessageRead,
 		UnreadCount:     int(unreadCount),
 		RideStatus:      ride.Status,

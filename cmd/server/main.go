@@ -67,7 +67,6 @@ func main() {
 		log.Printf("Warning: Failed to cleanup expired rides: %v", err)
 	}
 
-	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authSvc, otpSvc)
 	fmt.Println("Creating handlers...")
 	otpHandler := handlers.NewOTPHandler(otpSvc, authSvc)
