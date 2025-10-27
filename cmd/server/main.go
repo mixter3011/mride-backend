@@ -49,7 +49,7 @@ func main() {
 	webSocketSvc := services.NewWebSocketSvc(database)
 
 	notificationSvc := services.NewNotificationSvc(database, webSocketSvc)
-	rideSvc := services.NewRideSvc(database, notificationSvc)
+	rideSvc := services.NewRideSvc(database, notificationSvc, webSocketSvc)
 
 	subscriptionSvc := services.NewSubscriptionSvc(database, notificationSvc)
 	fmt.Println("Subscription service created")
