@@ -1,36 +1,93 @@
 package models
 
 import (
+	"database/sql/driver"
+	"encoding/json"
 	"time"
 )
 
 type RideSubscription struct {
-	ID               uint       `json:"id" gorm:"primaryKey"`
-	UserID           uint       `json:"user_id" gorm:"not null;index"`
-	Title            string     `json:"title" gorm:"size:100;not null"`
-	Description      string     `json:"description" gorm:"size:500"`
-	CarNumber        string     `json:"car_number" gorm:"size:20;not null"`
-	CarModel         string     `json:"car_model" gorm:"size:50;not null"`
-	PassengerCount   int        `json:"passenger_count" gorm:"not null;check:passenger_count > 0 AND passenger_count <= 8"`
-	Price            *float64   `json:"price" gorm:"check:price >= 0"`
-	FromLocation     string     `json:"from_location" gorm:"size:255;not null"`
-	ToLocation       string     `json:"to_location" gorm:"size:255;not null"`
-	FromLatitude     float64    `json:"from_latitude" gorm:"not null"`
-	FromLongitude    float64    `json:"from_longitude" gorm:"not null"`
-	ToLatitude       float64    `json:"to_latitude" gorm:"not null"`
-	ToLongitude      float64    `json:"to_longitude" gorm:"not null"`
-	DepartureTime    string     `json:"departure_time" gorm:"size:5;not null"`
-	RecurringDays    string     `json:"recurring_days" gorm:"size:255;not null"`
-	StartDate        time.Time  `json:"start_date" gorm:"not null"`
-	EndDate          *time.Time `json:"end_date,omitempty"`
-	Status           string     `json:"status" gorm:"size:20;default:'active';index"`
-	MaxSubscribers   int        `json:"max_subscribers" gorm:"default:0"`
-	NotificationTime int        `json:"notification_time" gorm:"default:60"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	ID               uint        `json:"id" gorm:"primaryKey"`
+	UserID           uint        `json:"user_id" gorm:"not null;index"`
+	Title            string      `json:"title" gorm:"size:100;not null"`
+	Description      string      `json:"description" gorm:"size:500"`
+	CarNumber        string      `json:"car_number" gorm:"size:20;not null"`
+	CarModel         string      `json:"car_model" gorm:"size:50;not null"`
+	PassengerCount   int         `json:"passenger_count" gorm:"not null;check:passenger_count > 0 AND passenger_count <= 8"`
+	Price            *float64    `json:"price" gorm:"check:price >= 0"`
+	FromLocation     string      `json:"from_location" gorm:"size:255;not null"`
+	ToLocation       string      `json:"to_location" gorm:"size:255;not null"`
+	FromLatitude     float64     `json:"from_latitude" gorm:"not null"`
+	FromLongitude    float64     `json:"from_longitude" gorm:"not null"`
+	ToLatitude       float64     `json:"to_latitude" gorm:"not null"`
+	ToLongitude      float64     `json:"to_longitude" gorm:"not null"`
+	DepartureTime    string      `json:"departure_time" gorm:"size:5;not null"`
+	RecurringDays    StringArray `json:"recurring_days" gorm:"type:varchar(255);not null"`
+	StartDate        time.Time   `json:"start_date" gorm:"not null"`
+	EndDate          *time.Time  `json:"end_date,omitempty"`
+	Status           string      `json:"status" gorm:"size:20;default:'active';index"`
+	MaxSubscribers   int         `json:"max_subscribers" gorm:"default:0"`
+	NotificationTime int         `json:"notification_time" gorm:"default:60"`
+	CreatedAt        time.Time   `json:"created_at"`
+	UpdatedAt        time.Time   `json:"updated_at"`
 
 	User        User                     `json:"driver,omitempty" gorm:"foreignKey:UserID"`
 	Subscribers []SubscriptionSubscriber `json:"subscribers,omitempty" gorm:"foreignKey:SubscriptionID"`
+}
+
+type StringArray []string
+
+func (s *StringArray) Scan(value interface{}) error {
+	if value == nil {
+		*s = []string{}
+		return nil
+	}
+
+	bytes, ok := value.([]byte)
+	if !ok {
+		str, ok := value.(string)
+		if !ok {
+			*s = []string{}
+			return nil
+		}
+		bytes = []byte(str)
+	}
+
+	var arr []string
+	if err := json.Unmarshal(bytes, &arr); err != nil {
+		*s = []string{}
+		return nil
+	}
+	*s = arr
+	return nil
+}
+
+func (s StringArray) Value() (driver.Value, error) {
+	if len(s) == 0 {
+		return "[]", nil
+	}
+	bytes, err := json.Marshal(s)
+	if err != nil {
+		return nil, err
+	}
+	return string(bytes), nil
+}
+
+func (s StringArray) MarshalJSON() ([]byte, error) {
+	if s == nil {
+		return []byte("[]"), nil
+	}
+	return json.Marshal([]string(s))
+}
+
+func (s *StringArray) UnmarshalJSON(data []byte) error {
+	var arr []string
+	if err := json.Unmarshal(data, &arr); err != nil {
+		*s = StringArray{}
+		return err
+	}
+	*s = StringArray(arr)
+	return nil
 }
 
 type SubscriptionSubscriber struct {

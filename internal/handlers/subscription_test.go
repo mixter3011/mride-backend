@@ -145,7 +145,7 @@ func TestSubscriptionHandler_CreateSubscription_Success(t *testing.T) {
 		FromLocation:  "Mumbai",
 		ToLocation:    "Pune",
 		DepartureTime: "09:00",
-		RecurringDays: "Monday,Tuesday",
+		RecurringDays: models.StringArray{"Monday", "Tuesday"},
 	}
 
 	resp := &models.SubscriptionResp{
@@ -214,7 +214,12 @@ func TestSubscriptionHandler_CreateSubscription_SameLocation(t *testing.T) {
 func TestSubscriptionHandler_GetSubscription_Success(t *testing.T) {
 	r, mockSvc := setupSubscriptionHandlerRouter()
 
-	subscription := models.RideSubscription{ID: 1, FromLocation: "Mumbai", ToLocation: "Pune"}
+	subscription := models.RideSubscription{
+		ID:            1,
+		FromLocation:  "Mumbai",
+		ToLocation:    "Pune",
+		RecurringDays: models.StringArray{"Monday"},
+	}
 	resp := &models.SubscriptionResp{
 		Subscription: subscription,
 		Driver:       models.User{ID: 1, FullName: "John Doe"},

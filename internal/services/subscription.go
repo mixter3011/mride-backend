@@ -59,11 +59,6 @@ func (s *SubscriptionSvc) CreateSubscription(userID uint, req models.CreateSubsc
 		return nil, fmt.Errorf("failed to get coordinates for to location: %v", err)
 	}
 
-	recurringDaysJSON, err := json.Marshal(req.RecurringDays)
-	if err != nil {
-		return nil, fmt.Errorf("failed to process recurring days: %v", err)
-	}
-
 	subscription := models.RideSubscription{
 		UserID:           userID,
 		Title:            req.Title,
@@ -79,7 +74,7 @@ func (s *SubscriptionSvc) CreateSubscription(userID uint, req models.CreateSubsc
 		ToLatitude:       toLat,
 		ToLongitude:      toLng,
 		DepartureTime:    req.DepartureTime,
-		RecurringDays:    string(recurringDaysJSON),
+		RecurringDays:    models.StringArray(req.RecurringDays),
 		StartDate:        req.StartDate,
 		EndDate:          req.EndDate,
 		Status:           "active",
@@ -195,11 +190,7 @@ func (s *SubscriptionSvc) UpdateSubscription(userID, subscriptionID uint, req mo
 		if err := s.validateRecurringDays(*req.RecurringDays); err != nil {
 			return err
 		}
-		recurringDaysJSON, err := json.Marshal(*req.RecurringDays)
-		if err != nil {
-			return fmt.Errorf("failed to process recurring days: %v", err)
-		}
-		updates["recurring_days"] = string(recurringDaysJSON)
+		updates["recurring_days"] = models.StringArray(*req.RecurringDays)
 	}
 
 	if req.EndDate != nil {
@@ -702,8 +693,7 @@ func (s *SubscriptionSvc) getSubscribers(subscriptionID uint) ([]models.User, er
 
 func (s *SubscriptionSvc) getNextRideDates(subscription models.RideSubscription, limit int) []time.Time {
 	var dates []time.Time
-	var recurringDays []string
-	json.Unmarshal([]byte(subscription.RecurringDays), &recurringDays)
+	recurringDays := []string(subscription.RecurringDays)
 
 	dayMap := make(map[time.Weekday]bool)
 	for _, day := range recurringDays {
