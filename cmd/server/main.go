@@ -57,6 +57,9 @@ func main() {
 	chatSvc := services.NewChatSvc(database, webSocketSvc, notificationSvc)
 	fmt.Println("Chat service created")
 
+	subscriptionChatSvc := services.NewSubscriptionChatSvc(database, webSocketSvc, notificationSvc)
+	fmt.Println("Subscription chat service created")
+
 	// cronScheduler := services.NewCronScheduler(subscriptionSvc, rideSvc)
 	// if err := cronScheduler.Start(); err != nil {
 	// 	log.Printf("Warning: Failed to start cron scheduler: %v", err)
@@ -77,6 +80,7 @@ func main() {
 	notificationHandler := handlers.NewNotificationHandler(notificationSvc)
 	webSocketHandler := handlers.NewWebSocketHandler(webSocketSvc, jwtSvc)
 	chatHandler := handlers.NewChatHandler(chatSvc)
+	subscriptionChatHandler := handlers.NewSubscriptionChatHandler(subscriptionChatSvc)
 
 	r := gin.New()
 
@@ -163,6 +167,12 @@ func main() {
 		protected.GET("/subscriptions/all", subscriptionHandler.GetAllSubscriptions)
 		protected.GET("/subscriptions/stats", subscriptionHandler.GetSubscriptionStats)
 		protected.POST("/subscription/:id/notifications/toggle", subscriptionHandler.ToggleNotifications)
+
+		protected.POST("/subscription/:id/chat/send", subscriptionChatHandler.SendMessage)
+		protected.GET("/subscription/:id/chat/history", subscriptionChatHandler.GetChatHistory)
+		protected.POST("/subscription/:id/chat/mark-read", subscriptionChatHandler.MarkChatAsRead)
+		protected.GET("/subscription/:id/chat/can-send", subscriptionChatHandler.CheckCanSendMessage)
+		protected.GET("/subscription-chats", subscriptionChatHandler.GetSubscriptionChats)
 
 		protected.POST("/admin/notifications/send-daily", subscriptionHandler.SendDailyNotifications)
 

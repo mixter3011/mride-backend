@@ -175,3 +175,37 @@ type SubscriptionStatsResp struct {
 	TotalSubscribers    int `json:"total_subscribers"`
 	TodaysRides         int `json:"todays_rides"`
 }
+
+type SubscriptionChat struct {
+	ID             uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	SubscriptionID uint      `gorm:"not null;index" json:"subscription_id"`
+	SenderID       uint      `gorm:"not null;index" json:"sender_id"`
+	Message        string    `gorm:"type:text;not null" json:"message"`
+	CreatedAt      time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	Sender       User             `gorm:"foreignKey:SenderID" json:"sender,omitempty"`
+	Subscription RideSubscription `gorm:"foreignKey:SubscriptionID" json:"subscription,omitempty"`
+}
+
+type SubscriptionChatReadStatus struct {
+	ID                uint      `gorm:"primaryKey;autoIncrement" json:"id"`
+	SubscriptionID    uint      `gorm:"not null;index:idx_sub_user" json:"subscription_id"`
+	UserID            uint      `gorm:"not null;index:idx_sub_user" json:"user_id"`
+	LastReadMessageID uint      `gorm:"not null" json:"last_read_message_id"`
+	UpdatedAt         time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+type SubscriptionChatRoomInfo struct {
+	SubscriptionID  uint      `json:"subscription_id"`
+	OtherUserID     uint      `json:"other_user_id"`
+	OtherUserName   string    `json:"other_user_name"`
+	LastMessage     string    `json:"last_message"`
+	LastMessageTime time.Time `json:"last_message_time"`
+	LastMessageRead bool      `json:"last_message_read"`
+	UnreadCount     int       `json:"unread_count"`
+	Title           string    `json:"title"`
+	FromLocation    string    `json:"from_location"`
+	ToLocation      string    `json:"to_location"`
+	DepartureTime   string    `json:"departure_time"`
+	IsDriver        bool      `json:"is_driver"`
+}
