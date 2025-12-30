@@ -167,9 +167,8 @@ func (s *SubscriptionChatSvc) MarkChatAsRead(userID, subscriptionID uint) error 
 func (s *SubscriptionChatSvc) GetSubscriptionChats(userID uint) ([]models.SubscriptionChatRoomInfo, error) {
 	var chatRooms []models.SubscriptionChatRoomInfo
 
-	// Created subscriptions
 	var createdSubs []models.RideSubscription
-	if err := s.db.Where("user_id = ? AND status = ?", userID, "active").
+	if err := s.db.Where("user_id = ?", userID).
 		Find(&createdSubs).Error; err != nil {
 		return nil, err
 	}
@@ -181,19 +180,14 @@ func (s *SubscriptionChatSvc) GetSubscriptionChats(userID uint) ([]models.Subscr
 		}
 	}
 
-	// Subscribed rides
 	var subscribedSubs []models.SubscriptionSubscriber
 	if err := s.db.Preload("Subscription").Preload("Subscription.User").
-		Where("subscriber_id = ? AND status = ?", userID, "active").
+		Where("subscriber_id = ?", userID).
 		Find(&subscribedSubs).Error; err != nil {
 		return nil, err
 	}
 
 	for _, ss := range subscribedSubs {
-		if ss.Subscription.Status != "active" {
-			continue
-		}
-
 		chatRoom := s.buildChatRoomInfo(userID, ss.Subscription, false)
 		if chatRoom != nil {
 			chatRooms = append(chatRooms, *chatRoom)
@@ -270,6 +264,7 @@ func (s *SubscriptionChatSvc) buildChatRoomInfo(userID uint, sub models.RideSubs
 		ToLocation:      sub.ToLocation,
 		DepartureTime:   sub.DepartureTime,
 		IsDriver:        isDriver,
+		Status:          sub.Status,
 	}
 }
 

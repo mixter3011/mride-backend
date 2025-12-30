@@ -208,4 +208,5 @@ type SubscriptionChatRoomInfo struct {
 	ToLocation      string    `json:"to_location"`
 	DepartureTime   string    `json:"departure_time"`
 	IsDriver        bool      `json:"is_driver"`
+	Status          string    `json:"status"`
 }
