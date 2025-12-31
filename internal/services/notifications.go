@@ -12,8 +12,9 @@ import (
 )
 
 type NotificationSvc struct {
-	db           *gorm.DB
-	webSocketSvc WebSocketInterface
+	db                  *gorm.DB
+	webSocketSvc        WebSocketInterface
+	pushNotificationSvc *PushNotificationSvc
 }
 
 func NewNotificationSvc(db *gorm.DB, webSocketSvc WebSocketInterface) *NotificationSvc {
@@ -21,6 +22,10 @@ func NewNotificationSvc(db *gorm.DB, webSocketSvc WebSocketInterface) *Notificat
 		db:           db,
 		webSocketSvc: webSocketSvc,
 	}
+}
+
+func (n *NotificationSvc) SetPushNotificationService(pushSvc *PushNotificationSvc) {
+	n.pushNotificationSvc = pushSvc
 }
 
 func (n *NotificationSvc) CreateRideJoinNotification(driverID, rideID, passengerID uint, passengerName string) error {
@@ -142,9 +147,14 @@ func (n *NotificationSvc) createAndSendNotification(userID uint, notificationTyp
 		}
 
 		if err := n.webSocketSvc.SendToUser(int(userID), wsMessage); err != nil {
-			fmt.Printf("Failed to send WebSocket notification: %v\n", err)
+			log.Printf("Failed to send WebSocket notification: %v\n", err)
 		} else {
-			fmt.Printf("WebSocket notification sent to user %d\n", userID)
+			log.Printf("WebSocket notification sent to user %d\n", userID)
+		}
+	} else {
+
+		if n.pushNotificationSvc != nil {
+			go n.pushNotificationSvc.SendPushNotification(userID, &notification)
 		}
 	}
 
@@ -311,7 +321,7 @@ func (n *NotificationSvc) CreateChatNotification(recipientID, rideID, senderID u
 		return err
 	}
 
-	if n.webSocketSvc != nil {
+	if n.webSocketSvc != nil && n.webSocketSvc.IsUserOnline(int(recipientID)) {
 		wsMessage := WSMessage{
 			Type:    "notification",
 			Title:   notification.Title,
@@ -321,6 +331,11 @@ func (n *NotificationSvc) CreateChatNotification(recipientID, rideID, senderID u
 
 		if err := n.webSocketSvc.SendToUser(int(recipientID), wsMessage); err != nil {
 			log.Printf("Failed to send WebSocket notification: %v", err)
+		}
+	} else {
+
+		if n.pushNotificationSvc != nil {
+			go n.pushNotificationSvc.SendPushNotification(recipientID, &notification)
 		}
 	}
 

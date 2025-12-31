@@ -49,6 +49,32 @@ func main() {
 	webSocketSvc := services.NewWebSocketSvc(database)
 
 	notificationSvc := services.NewNotificationSvc(database, webSocketSvc)
+
+	pushNotificationSvc, err := services.NewPushNotificationSvc(
+		database,
+		cfg.FirebaseCredentials,
+		webSocketSvc,
+		notificationSvc,
+	)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize push notification service: %v", err)
+		log.Println("Push notifications will be disabled")
+	} else {
+
+		notificationSvc.SetPushNotificationService(pushNotificationSvc)
+		fmt.Println("Push notification service created")
+
+		go func() {
+			ticker := time.NewTicker(24 * time.Hour)
+			defer ticker.Stop()
+			for range ticker.C {
+				if err := pushNotificationSvc.CleanupInactiveTokens(); err != nil {
+					log.Printf("Failed to cleanup inactive tokens: %v", err)
+				}
+			}
+		}()
+	}
+
 	rideSvc := services.NewRideSvc(database, notificationSvc, webSocketSvc)
 
 	subscriptionSvc := services.NewSubscriptionSvc(database, notificationSvc)
@@ -59,12 +85,6 @@ func main() {
 
 	subscriptionChatSvc := services.NewSubscriptionChatSvc(database, webSocketSvc, notificationSvc)
 	fmt.Println("Subscription chat service created")
-
-	// cronScheduler := services.NewCronScheduler(subscriptionSvc, rideSvc)
-	// if err := cronScheduler.Start(); err != nil {
-	// 	log.Printf("Warning: Failed to start cron scheduler: %v", err)
-	// }
-	// defer cronScheduler.Stop()
 
 	if err := rideSvc.CleanupExpiredRides(); err != nil {
 		log.Printf("Warning: Failed to cleanup expired rides: %v", err)
@@ -81,6 +101,12 @@ func main() {
 	webSocketHandler := handlers.NewWebSocketHandler(webSocketSvc, jwtSvc)
 	chatHandler := handlers.NewChatHandler(chatSvc)
 	subscriptionChatHandler := handlers.NewSubscriptionChatHandler(subscriptionChatSvc)
+
+	var pushNotificationHandler *handlers.PushNotificationHandler
+	if pushNotificationSvc != nil {
+		pushNotificationHandler = handlers.NewPushNotificationHandler(pushNotificationSvc)
+		fmt.Println("Push notification handler created")
+	}
 
 	r := gin.New()
 
@@ -180,6 +206,16 @@ func main() {
 		protected.PUT("/notifications/:id/read", notificationHandler.MarkAsRead)
 		protected.PUT("/notifications/read-all", notificationHandler.MarkAllAsRead)
 		protected.GET("/notifications/unread-count", notificationHandler.GetUnreadCount)
+
+		if pushNotificationHandler != nil {
+			protected.POST("/push/register", pushNotificationHandler.RegisterDeviceToken)
+			protected.POST("/push/unregister", pushNotificationHandler.UnregisterDeviceToken)
+			protected.GET("/push/devices", pushNotificationHandler.GetDeviceTokens)
+			protected.GET("/push/preferences", pushNotificationHandler.GetNotificationPreferences)
+			protected.PUT("/push/preferences", pushNotificationHandler.UpdateNotificationPreferences)
+			protected.POST("/push/test", pushNotificationHandler.TestPushNotification)
+			protected.GET("/push/stats", pushNotificationHandler.GetPushNotificationStats)
+		}
 
 		protected.GET("/users/online", webSocketHandler.GetOnlineUsers)
 		protected.GET("/ws/online-db", webSocketHandler.GetOnlineUsersFromDB)

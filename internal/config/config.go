@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -32,9 +34,41 @@ func Load() *Config {
 		TwilioToken:         getEnv("TWILIO_TOKEN", ""),
 		TwilioPhone:         getEnv("TWILIO_PHONE", ""),
 		ResendAPIKey:        getEnv("RESEND_API_KEY", ""),
-		FirebaseCredentials: getEnv("FIREBASE_CREDENTIALS", ""),
-		FirebaseProjectID:   getEnv("FIREBASE_PROJECT_ID", ""),
+		FirebaseCredentials: loadFirebaseCredentials(),
+		FirebaseProjectID:   getEnv("FIREBASE_PROJECT_ID", "mride-51861"),
 	}
+}
+
+func loadFirebaseCredentials() string {
+
+	if creds := os.Getenv("FIREBASE_CREDENTIALS"); creds != "" {
+		if strings.HasPrefix(strings.TrimSpace(creds), "{") {
+			return creds
+		}
+	}
+
+	if credFile := os.Getenv("FIREBASE_CREDENTIALS_FILE"); credFile != "" {
+		data, err := os.ReadFile(credFile)
+		if err != nil {
+			fmt.Printf("Warning: Failed to read Firebase credentials file %s: %v\n", credFile, err)
+			return ""
+		}
+		return string(data)
+	}
+
+	defaultPath := "./mride-51861-firebase-adminsdk-fbsvc-08c24a73d0.json"
+	if _, err := os.Stat(defaultPath); err == nil {
+		data, err := os.ReadFile(defaultPath)
+		if err != nil {
+			fmt.Printf("Warning: Failed to read default Firebase credentials file: %v\n", err)
+			return ""
+		}
+		log.Println("✓ Loaded Firebase credentials from default location")
+		return string(data)
+	}
+
+	log.Println("Warning: No Firebase credentials found. Push notifications will be disabled.")
+	return ""
 }
 
 func getEnv(key, def string) string {

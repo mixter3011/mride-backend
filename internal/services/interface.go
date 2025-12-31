@@ -41,3 +41,16 @@ type WebSocketInterface interface {
 	CleanupStaleConnections() error
 	Shutdown()
 }
+
+type PushNotificationInterface interface {
+	RegisterDeviceToken(userID uint, token, platform string) error
+	UnregisterDeviceToken(userID uint, token string) error
+	GetUserDeviceTokens(userID uint) ([]DeviceToken, error)
+	SendPushNotification(userID uint, notification *models.Notification) error
+	ShouldSendPushNotification(userID uint, notificationType string) bool
+	UpdateNotificationPreferences(userID uint, prefs *NotificationPreference) error
+	GetNotificationPreferences(userID uint) (*NotificationPreference, error)
+	SendBulkNotification(userIDs []uint, title, message string, data map[string]interface{}) error
+	CleanupInactiveTokens() error
+	GetPushNotificationStats() (map[string]interface{}, error)
+}
