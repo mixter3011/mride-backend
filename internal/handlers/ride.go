@@ -182,12 +182,15 @@ func (h *RideHandler) GetNearbyRides(c *gin.Context) {
 		return
 	}
 
+	maxDeviation, _ := strconv.ParseFloat(c.Query("max_route_deviation_km"), 64)
+
 	req := models.NearbyRidesReq{
-		FromLatitude:  fromLat,
-		FromLongitude: fromLng,
-		ToLatitude:    toLat,
-		ToLongitude:   toLng,
-		RadiusKM:      radius,
+		FromLatitude:        fromLat,
+		FromLongitude:       fromLng,
+		ToLatitude:          toLat,
+		ToLongitude:         toLng,
+		RadiusKM:            radius,
+		MaxRouteDeviationKM: maxDeviation,
 	}
 
 	rides, err := h.rideSvc.GetNearbyRides(userID, req)

@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math"
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"time"
 
 	"mride-backend/internal/models"
@@ -230,6 +230,9 @@ func (r *RideSvc) GetNearbyRides(userID uint, req models.NearbyRidesReq) ([]mode
 	if req.RadiusKM <= 0 {
 		req.RadiusKM = 10
 	}
+	if req.MaxRouteDeviationKM <= 0 {
+		req.MaxRouteDeviationKM = 3.0
+	}
 
 	now := time.Now()
 
@@ -250,16 +253,31 @@ func (r *RideSvc) GetNearbyRides(userID uint, req models.NearbyRidesReq) ([]mode
 		fromDistance := r.calculateDistance(req.FromLatitude, req.FromLongitude, ride.FromLatitude, ride.FromLongitude)
 		toDistance := r.calculateDistance(req.ToLatitude, req.ToLongitude, ride.ToLatitude, ride.ToLongitude)
 
-		fmt.Printf("Ride ID: %d, From Distance: %.2f km, To Distance: %.2f km, Status: %s, Departure: %v\n",
-			ride.ID, fromDistance, toDistance, ride.Status, ride.DepartureTime)
+		if fromDistance <= req.RadiusKM && toDistance <= req.RadiusKM {
+			ms := CalculateMatchScore(
+				req.FromLatitude, req.FromLongitude, req.ToLatitude, req.ToLongitude,
+				ride.FromLatitude, ride.FromLongitude, ride.ToLatitude, ride.ToLongitude,
+			)
 
-		rideResponses = append(rideResponses, models.RideResp{
-			Ride:           ride,
-			User:           ride.User,
-			AvailableSeats: ride.PassengerCount - int(joinedCount),
-			HasPassengers:  joinedCount > 0,
-		})
+			if ms.RouteDeviation > req.MaxRouteDeviationKM {
+				continue
+			}
+
+			rideResponses = append(rideResponses, models.RideResp{
+				Ride:              ride,
+				User:              ride.User,
+				AvailableSeats:    ride.PassengerCount - int(joinedCount),
+				HasPassengers:     joinedCount > 0,
+				MatchScore:        ms.Score,
+				PickupDistanceKm:  ms.PickupDistance,
+				DropoffDistanceKm: ms.DropoffDistance,
+			})
+		}
 	}
+
+	sort.Slice(rideResponses, func(i, j int) bool {
+		return rideResponses[i].MatchScore < rideResponses[j].MatchScore
+	})
 
 	return rideResponses, nil
 }
@@ -510,23 +528,7 @@ func (r *RideSvc) getJoinedUsers(rideID uint) ([]models.User, error) {
 }
 
 func (r *RideSvc) calculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
-	const earthRadius = 6371.0
-
-	lat1Rad := lat1 * math.Pi / 180
-	lon1Rad := lon1 * math.Pi / 180
-	lat2Rad := lat2 * math.Pi / 180
-	lon2Rad := lon2 * math.Pi / 180
-
-	deltaLat := lat2Rad - lat1Rad
-	deltaLon := lon2Rad - lon1Rad
-
-	a := math.Sin(deltaLat/2)*math.Sin(deltaLat/2) +
-		math.Cos(lat1Rad)*math.Cos(lat2Rad)*
-			math.Sin(deltaLon/2)*math.Sin(deltaLon/2)
-
-	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
-
-	return earthRadius * c
+	return haversineDistance(lat1, lon1, lat2, lon2)
 }
 
 func (r *RideSvc) getCoordinates(address string) (float64, float64, error) {

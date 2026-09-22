@@ -274,14 +274,17 @@ func (h *SubscriptionHandler) GetNearbySubscriptions(c *gin.Context) {
 		return
 	}
 
+	maxDeviation, _ := strconv.ParseFloat(c.Query("max_route_deviation_km"), 64)
+
 	req := models.NearbySubscriptionsReq{
-		FromLatitude:  fromLat,
-		FromLongitude: fromLng,
-		ToLatitude:    toLat,
-		ToLongitude:   toLng,
-		RadiusKM:      radius,
-		DepartureTime: c.Query("departure_time"),
-		WeekDay:       c.Query("weekday"),
+		FromLatitude:        fromLat,
+		FromLongitude:       fromLng,
+		ToLatitude:          toLat,
+		ToLongitude:         toLng,
+		RadiusKM:            radius,
+		MaxRouteDeviationKM: maxDeviation,
+		DepartureTime:       c.Query("departure_time"),
+		WeekDay:             c.Query("weekday"),
 	}
 
 	var userID *uint

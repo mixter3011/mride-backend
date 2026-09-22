@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -492,6 +493,9 @@ func (s *SubscriptionSvc) GetNearbySubscriptions(req models.NearbySubscriptionsR
 	if req.RadiusKM <= 0 {
 		req.RadiusKM = 10
 	}
+	if req.MaxRouteDeviationKM <= 0 {
+		req.MaxRouteDeviationKM = 3.0
+	}
 
 	query := s.db.Preload("User").Where("status = ?", "active")
 
@@ -509,17 +513,74 @@ func (s *SubscriptionSvc) GetNearbySubscriptions(req models.NearbySubscriptionsR
 		return nil, err
 	}
 
-	var nearbySubscriptions []models.RideSubscription
+	type scoredSub struct {
+		sub   models.RideSubscription
+		score MatchScore
+	}
+
+	var nearbySubs []scoredSub
 	for _, sub := range subscriptions {
 		fromDistance := s.calculateDistance(req.FromLatitude, req.FromLongitude, sub.FromLatitude, sub.FromLongitude)
 		toDistance := s.calculateDistance(req.ToLatitude, req.ToLongitude, sub.ToLatitude, sub.ToLongitude)
 
 		if fromDistance <= req.RadiusKM && toDistance <= req.RadiusKM {
-			nearbySubscriptions = append(nearbySubscriptions, sub)
+			ms := CalculateMatchScore(
+				req.FromLatitude, req.FromLongitude, req.ToLatitude, req.ToLongitude,
+				sub.FromLatitude, sub.FromLongitude, sub.ToLatitude, sub.ToLongitude,
+			)
+
+			if ms.RouteDeviation > req.MaxRouteDeviationKM {
+				continue
+			}
+
+			nearbySubs = append(nearbySubs, scoredSub{sub: sub, score: ms})
 		}
 	}
 
-	return s.buildSubscriptionResponses(nearbySubscriptions, userID)
+	sort.Slice(nearbySubs, func(i, j int) bool {
+		return nearbySubs[i].score.Score < nearbySubs[j].score.Score
+	})
+
+	// Build response with scoring fields populated.
+	responses := make([]models.SubscriptionResp, 0, len(nearbySubs))
+	for _, ns := range nearbySubs {
+		sub := ns.sub
+		var subscriberCount int64
+		s.db.Model(&models.SubscriptionSubscriber{}).
+			Where("subscription_id = ? AND status = ?", sub.ID, "active").
+			Count(&subscriberCount)
+
+		isSubscribed := false
+		if userID != nil {
+			var count int64
+			s.db.Model(&models.SubscriptionSubscriber{}).
+				Where("subscription_id = ? AND subscriber_id = ? AND status = ?",
+					sub.ID, *userID, "active").
+				Count(&count)
+			isSubscribed = count > 0
+		}
+
+		nextRides := s.getNextRideDates(sub, 3)
+
+		availableSlots := sub.MaxSubscribers - int(subscriberCount)
+		if availableSlots < 0 {
+			availableSlots = 0
+		}
+
+		responses = append(responses, models.SubscriptionResp{
+			Subscription:      sub,
+			Driver:            sub.User,
+			AvailableSlots:    availableSlots,
+			SubscriberCount:   int(subscriberCount),
+			NextRideDates:     nextRides,
+			IsSubscribed:      isSubscribed,
+			MatchScore:        ns.score.Score,
+			PickupDistanceKm:  ns.score.PickupDistance,
+			DropoffDistanceKm: ns.score.DropoffDistance,
+		})
+	}
+
+	return responses, nil
 }
 
 func (s *SubscriptionSvc) GetAllSubscriptions(userID *uint) ([]models.SubscriptionResp, error) {
@@ -660,25 +721,7 @@ func (s *SubscriptionSvc) getCoordinates(address string) (float64, float64, erro
 }
 
 func (s *SubscriptionSvc) calculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
-	const earthRadius = 6371
-
-	lat1Rad := lat1 * (3.14159265359 / 180)
-	lon1Rad := lon1 * (3.14159265359 / 180)
-	lat2Rad := lat2 * (3.14159265359 / 180)
-	lon2Rad := lon2 * (3.14159265359 / 180)
-
-	deltaLat := lat2Rad - lat1Rad
-	deltaLon := lon2Rad - lon1Rad
-
-	a := 0.5 - 0.5*((deltaLat*0.5)*(deltaLat*0.5)+(deltaLon*0.5)*(deltaLon*0.5))
-	if a < 0 {
-		a = 0
-	}
-	if a > 1 {
-		a = 1
-	}
-
-	return earthRadius * 2 * (a * a)
+	return haversineDistance(lat1, lon1, lat2, lon2)
 }
 
 func (s *SubscriptionSvc) getSubscribers(subscriptionID uint) ([]models.User, error) {

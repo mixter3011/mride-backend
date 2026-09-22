@@ -1054,6 +1054,109 @@ func TestGetNearbyRides_DefaultRadius(t *testing.T) {
 
 	assert.NoError(t, err)
 }
+
+func TestGetNearbyRides_OutOfRadius(t *testing.T) {
+	db := setupRideTestDB(t)
+	rideSvc := NewRideSvc(db, nil, nil)
+
+	driver := createTestUser(db, 1, "Driver")
+
+	// Mumbai ride
+	ride := models.Ride{
+		UserID:         driver.ID,
+		CarNumber:      "ABC123",
+		CarModel:       "Honda Civic",
+		PassengerCount: 3,
+		FromLocation:   "Mumbai",
+		ToLocation:     "Pune",
+		FromLatitude:   19.0760,
+		FromLongitude:  72.8777,
+		ToLatitude:     18.5204,
+		ToLongitude:    73.8567,
+		DepartureTime:  time.Now().Add(2 * time.Hour),
+		Status:         "active",
+	}
+	db.Create(&ride)
+
+	// Search from Delhi — well outside 5km radius
+	req := models.NearbyRidesReq{
+		FromLatitude:        28.7041,
+		FromLongitude:       77.1025,
+		ToLatitude:          28.4595,
+		ToLongitude:         77.0266,
+		RadiusKM:            5.0,
+		MaxRouteDeviationKM: 100.0, // large deviation so it doesn't filter on this
+	}
+
+	rides, err := rideSvc.GetNearbyRides(2, req)
+
+	assert.NoError(t, err)
+	assert.Empty(t, rides, "Rides in Mumbai should not appear when searching from Delhi with 5km radius")
+}
+
+func TestGetNearbyRides_SortedByScore(t *testing.T) {
+	db := setupRideTestDB(t)
+	rideSvc := NewRideSvc(db, nil, nil)
+
+	driver := createTestUser(db, 1, "Driver")
+
+	// Ride A: closer to requester (very near)
+	rideA := models.Ride{
+		UserID:         driver.ID,
+		CarNumber:      "CLOSE1",
+		CarModel:       "Honda Civic",
+		PassengerCount: 3,
+		FromLocation:   "Near From",
+		ToLocation:     "Near To",
+		FromLatitude:   19.076,
+		FromLongitude:  72.877,
+		ToLatitude:     18.520,
+		ToLongitude:    73.856,
+		DepartureTime:  time.Now().Add(2 * time.Hour),
+		Status:         "active",
+	}
+	db.Create(&rideA)
+
+	// Ride B: farther from requester (but still within radius)
+	rideB := models.Ride{
+		UserID:         driver.ID,
+		CarNumber:      "FAR01",
+		CarModel:       "Toyota Corolla",
+		PassengerCount: 2,
+		FromLocation:   "Far From",
+		ToLocation:     "Far To",
+		FromLatitude:   19.10,
+		FromLongitude:  72.90,
+		ToLatitude:     18.55,
+		ToLongitude:    73.90,
+		DepartureTime:  time.Now().Add(3 * time.Hour),
+		Status:         "active",
+	}
+	db.Create(&rideB)
+
+	req := models.NearbyRidesReq{
+		FromLatitude:        19.080,
+		FromLongitude:       72.880,
+		ToLatitude:          18.520,
+		ToLongitude:         73.850,
+		RadiusKM:            50,
+		MaxRouteDeviationKM: 100.0,
+	}
+
+	rides, err := rideSvc.GetNearbyRides(2, req)
+
+	assert.NoError(t, err)
+	assert.Len(t, rides, 2)
+
+	// Results should be sorted by score ascending (closest first)
+	assert.LessOrEqual(t, rides[0].MatchScore, rides[1].MatchScore,
+		"Results should be sorted by match score ascending")
+	assert.Equal(t, rideA.ID, rides[0].Ride.ID, "Closer ride should be first")
+
+	// Verify scoring fields are populated
+	assert.Greater(t, rides[0].PickupDistanceKm, 0.0)
+	assert.Greater(t, rides[0].DropoffDistanceKm, 0.0)
+}
 func TestCleanupExpiredRides(t *testing.T) {
 	db := setupRideTestDB(t)
 	rideSvc := NewRideSvc(db, nil, nil)

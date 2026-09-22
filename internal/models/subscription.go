@@ -143,13 +143,16 @@ type UpdateSubscriptionReq struct {
 }
 
 type SubscriptionResp struct {
-	Subscription    RideSubscription `json:"subscription"`
-	Driver          User             `json:"driver"`
-	Subscribers     []User           `json:"subscribers,omitempty"`
-	AvailableSlots  int              `json:"available_slots"`
-	SubscriberCount int              `json:"subscriber_count"`
-	NextRideDates   []time.Time      `json:"next_ride_dates,omitempty"`
-	IsSubscribed    bool             `json:"is_subscribed,omitempty"`
+	Subscription      RideSubscription `json:"subscription"`
+	Driver            User             `json:"driver"`
+	Subscribers       []User           `json:"subscribers,omitempty"`
+	AvailableSlots    int              `json:"available_slots"`
+	SubscriberCount   int              `json:"subscriber_count"`
+	NextRideDates     []time.Time      `json:"next_ride_dates,omitempty"`
+	IsSubscribed      bool             `json:"is_subscribed,omitempty"`
+	MatchScore        float64          `json:"match_score,omitempty"`
+	PickupDistanceKm  float64          `json:"pickup_distance_km,omitempty"`
+	DropoffDistanceKm float64          `json:"dropoff_distance_km,omitempty"`
 }
 
 type SearchSubscriptionsReq struct {
@@ -160,13 +163,14 @@ type SearchSubscriptionsReq struct {
 }
 
 type NearbySubscriptionsReq struct {
-	FromLatitude  float64 `json:"from_latitude" binding:"required"`
-	FromLongitude float64 `json:"from_longitude" binding:"required"`
-	ToLatitude    float64 `json:"to_latitude" binding:"required"`
-	ToLongitude   float64 `json:"to_longitude" binding:"required"`
-	RadiusKM      float64 `json:"radius_km"`
-	DepartureTime string  `json:"departure_time,omitempty"`
-	WeekDay       string  `json:"weekday,omitempty"`
+	FromLatitude        float64 `json:"from_latitude" binding:"required"`
+	FromLongitude       float64 `json:"from_longitude" binding:"required"`
+	ToLatitude          float64 `json:"to_latitude" binding:"required"`
+	ToLongitude         float64 `json:"to_longitude" binding:"required"`
+	RadiusKM            float64 `json:"radius_km"`
+	MaxRouteDeviationKM float64 `json:"max_route_deviation_km"`
+	DepartureTime       string  `json:"departure_time,omitempty"`
+	WeekDay             string  `json:"weekday,omitempty"`
 }
 
 type SubscriptionStatsResp struct {

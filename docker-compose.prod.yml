@@ -47,7 +47,7 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.mride-backend.rule=Host(`mride.senachi.me`)"
+      - "traefik.http.routers.mride-backend.rule=Host(`mride.saby.to`)"
       - "traefik.http.routers.mride-backend.entrypoints=websecure"
       - "traefik.http.routers.mride-backend.tls.certresolver=letsencrypt"
       - "traefik.http.services.mride-backend.loadbalancer.server.port=8080"
@@ -56,7 +56,7 @@ services:
       - "traefik.http.middlewares.websocket-headers.headers.customrequestheaders.Upgrade=websocket"
       - "traefik.http.routers.mride-backend.middlewares=websocket-headers"
       
-      - "traefik.http.routers.mride-backend-http.rule=Host(`mride.senachi.me`)"
+      - "traefik.http.routers.mride-backend-http.rule=Host(`mride.saby.to`)"
       - "traefik.http.routers.mride-backend-http.entrypoints=web"
       - "traefik.http.routers.mride-backend-http.middlewares=redirect-to-https"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"

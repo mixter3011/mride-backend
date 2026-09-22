@@ -61,18 +61,22 @@ type SearchByLocationReq struct {
 	RadiusKM      float64 `form:"radius"`
 }
 type NearbyRidesReq struct {
-	FromLatitude  float64 `json:"from_latitude" binding:"required"`
-	FromLongitude float64 `json:"from_longitude" binding:"required"`
-	ToLatitude    float64 `json:"to_latitude" binding:"required"`
-	ToLongitude   float64 `json:"to_longitude" binding:"required"`
-	RadiusKM      float64 `json:"radius_km"`
+	FromLatitude        float64 `json:"from_latitude" binding:"required"`
+	FromLongitude       float64 `json:"from_longitude" binding:"required"`
+	ToLatitude          float64 `json:"to_latitude" binding:"required"`
+	ToLongitude         float64 `json:"to_longitude" binding:"required"`
+	RadiusKM            float64 `json:"radius_km"`
+	MaxRouteDeviationKM float64 `json:"max_route_deviation_km"`
 }
 type RideResp struct {
-	Ride           Ride   `json:"ride"`
-	User           User   `json:"driver"`
-	JoinedUsers    []User `json:"joined_users,omitempty"`
-	AvailableSeats int    `json:"available_seats"`
-	HasPassengers  bool   `json:"has_passengers"`
+	Ride              Ride    `json:"ride"`
+	User              User    `json:"driver"`
+	JoinedUsers       []User  `json:"joined_users,omitempty"`
+	AvailableSeats    int     `json:"available_seats"`
+	HasPassengers     bool    `json:"has_passengers"`
+	MatchScore        float64 `json:"match_score,omitempty"`
+	PickupDistanceKm  float64 `json:"pickup_distance_km,omitempty"`
+	DropoffDistanceKm float64 `json:"dropoff_distance_km,omitempty"`
 }
 type JoinedRidesResp struct {
 	CreatedRides []RideResp `json:"created_rides"`

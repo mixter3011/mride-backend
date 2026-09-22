@@ -602,3 +602,100 @@ func TestSubscriptionSvc_SubscribeToRide_FullSubscription(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "subscription is full")
 }
+
+func TestGetNearbySubscriptions_OutOfRadius(t *testing.T) {
+	db := setupSubscriptionTestDB(t)
+	subscriptionSvc := NewSubscriptionSvc(db, nil)
+
+	user := createTestUser(db, 1, "John Doe")
+	// Mumbai subscription
+	createTestSubscription(db, user.ID)
+
+	// Search from Delhi — well outside 5km radius
+	req := models.NearbySubscriptionsReq{
+		FromLatitude:        28.7041,
+		FromLongitude:       77.1025,
+		ToLatitude:          28.4595,
+		ToLongitude:         77.0266,
+		RadiusKM:            5.0,
+		MaxRouteDeviationKM: 100.0,
+	}
+
+	subscriptions, err := subscriptionSvc.GetNearbySubscriptions(req, &user.ID)
+	assert.NoError(t, err)
+	assert.Empty(t, subscriptions, "Subscriptions in Mumbai should not appear when searching from Delhi with 5km radius")
+}
+
+func TestGetNearbySubscriptions_SortedByScore(t *testing.T) {
+	db := setupSubscriptionTestDB(t)
+	subscriptionSvc := NewSubscriptionSvc(db, nil)
+
+	user := createTestUser(db, 1, "John Doe")
+
+	// Subscription A: close to requester
+	subA := models.RideSubscription{
+		UserID:           user.ID,
+		Title:            "Close Commute",
+		CarNumber:        "CLOSE1",
+		CarModel:         "Honda Civic",
+		PassengerCount:   3,
+		FromLocation:     "Near From",
+		ToLocation:       "Near To",
+		FromLatitude:     19.076,
+		FromLongitude:    72.877,
+		ToLatitude:       18.520,
+		ToLongitude:      73.856,
+		DepartureTime:    "09:00",
+		RecurringDays:    models.StringArray{"Monday"},
+		StartDate:        time.Now().UTC().Add(24 * time.Hour),
+		Status:           "active",
+		MaxSubscribers:   4,
+		NotificationTime: 60,
+	}
+	db.Create(&subA)
+
+	// Subscription B: farther from requester
+	subB := models.RideSubscription{
+		UserID:           user.ID,
+		Title:            "Far Commute",
+		CarNumber:        "FAR01",
+		CarModel:         "Toyota Corolla",
+		PassengerCount:   2,
+		FromLocation:     "Far From",
+		ToLocation:       "Far To",
+		FromLatitude:     19.10,
+		FromLongitude:    72.90,
+		ToLatitude:       18.55,
+		ToLongitude:      73.90,
+		DepartureTime:    "10:00",
+		RecurringDays:    models.StringArray{"Monday"},
+		StartDate:        time.Now().UTC().Add(24 * time.Hour),
+		Status:           "active",
+		MaxSubscribers:   4,
+		NotificationTime: 60,
+	}
+	db.Create(&subB)
+
+	req := models.NearbySubscriptionsReq{
+		FromLatitude:        19.080,
+		FromLongitude:       72.880,
+		ToLatitude:          18.520,
+		ToLongitude:         73.850,
+		RadiusKM:            50,
+		MaxRouteDeviationKM: 100.0,
+	}
+
+	subscriptions, err := subscriptionSvc.GetNearbySubscriptions(req, nil)
+
+	assert.NoError(t, err)
+	assert.Len(t, subscriptions, 2)
+
+	// Results should be sorted by score ascending (closest first)
+	assert.LessOrEqual(t, subscriptions[0].MatchScore, subscriptions[1].MatchScore,
+		"Results should be sorted by match score ascending")
+	assert.Equal(t, subA.ID, subscriptions[0].Subscription.ID, "Closer subscription should be first")
+
+	// Verify scoring fields are populated
+	assert.Greater(t, subscriptions[0].PickupDistanceKm, 0.0)
+	assert.Greater(t, subscriptions[0].DropoffDistanceKm, 0.0)
+}
