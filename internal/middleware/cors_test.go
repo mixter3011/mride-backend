@@ -20,12 +20,13 @@ func TestCORSMiddleware_Headers(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/test", nil)
+	req.Header.Set("Origin", "https://saby.to")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
 	headers := w.Header()
-	assert.Equal(t, "*", headers.Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "https://saby.to", headers.Get("Access-Control-Allow-Origin"))
 	assert.Equal(t, "true", headers.Get("Access-Control-Allow-Credentials"))
 	assert.Equal(t, "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, Sec-WebSocket-Protocol, Sec-WebSocket-Key, Sec-WebSocket-Version, Connection, Upgrade", headers.Get("Access-Control-Allow-Headers"))
 	assert.Equal(t, "POST, OPTIONS, GET, PUT, DELETE", headers.Get("Access-Control-Allow-Methods"))
@@ -42,13 +43,14 @@ func TestCORSMiddleware_OptionsRequest(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("OPTIONS", "/test", nil)
+	req.Header.Set("Origin", "https://www.saby.to")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusNoContent, w.Code)
 	assert.Empty(t, w.Body.String())
 
 	headers := w.Header()
-	assert.Equal(t, "*", headers.Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "https://www.saby.to", headers.Get("Access-Control-Allow-Origin"))
 	assert.Equal(t, "POST, OPTIONS, GET, PUT, DELETE", headers.Get("Access-Control-Allow-Methods"))
 }
 
@@ -63,7 +65,7 @@ func TestCORSMiddleware_PreflightRequest(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("OPTIONS", "/api/data", nil)
-	req.Header.Set("Origin", "https://example.com")
+	req.Header.Set("Origin", "http://localhost:3000")
 	req.Header.Set("Access-Control-Request-Method", "POST")
 	req.Header.Set("Access-Control-Request-Headers", "Content-Type, Authorization")
 	router.ServeHTTP(w, req)
@@ -72,7 +74,7 @@ func TestCORSMiddleware_PreflightRequest(t *testing.T) {
 	assert.Empty(t, w.Body.String())
 
 	headers := w.Header()
-	assert.Equal(t, "*", headers.Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "http://localhost:3000", headers.Get("Access-Control-Allow-Origin"))
 	assert.Equal(t, "true", headers.Get("Access-Control-Allow-Credentials"))
 	assert.Equal(t, "POST, OPTIONS, GET, PUT, DELETE", headers.Get("Access-Control-Allow-Methods"))
 }
@@ -101,20 +103,20 @@ func TestCORSMiddleware_AllMethods(t *testing.T) {
 		t.Run(method, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			req, _ := http.NewRequest(method, "/test", nil)
-			req.Header.Set("Origin", "https://example.com")
+			req.Header.Set("Origin", "https://saby.to")
 			router.ServeHTTP(w, req)
 
 			assert.Equal(t, http.StatusOK, w.Code)
 			assert.Contains(t, w.Body.String(), method)
 
 			headers := w.Header()
-			assert.Equal(t, "*", headers.Get("Access-Control-Allow-Origin"))
+			assert.Equal(t, "https://saby.to", headers.Get("Access-Control-Allow-Origin"))
 			assert.Equal(t, "true", headers.Get("Access-Control-Allow-Credentials"))
 		})
 	}
 }
 
-func TestCORSMiddleware_WithOrigin(t *testing.T) {
+func TestCORSMiddleware_InvalidOrigin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
@@ -125,11 +127,11 @@ func TestCORSMiddleware_WithOrigin(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/test", nil)
-	req.Header.Set("Origin", "https://mydomain.com")
+	req.Header.Set("Origin", "https://malicious-site.com")
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "", w.Header().Get("Access-Control-Allow-Origin"))
 }
 
 func TestCORSMiddleware_CallsNext(t *testing.T) {
